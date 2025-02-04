@@ -1,0 +1,2 @@
+pygame~=2.6.1
+svgpathtools~=1.6.1
