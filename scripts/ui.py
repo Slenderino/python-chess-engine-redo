@@ -3,7 +3,7 @@ import os
 import game
 import piecesets
 import json
-import re
+import pygame_gui
 
 TEXT_COLOR = '#8E4A49'
 BOARD_OUTLINE = '#5F464B'
@@ -25,6 +25,7 @@ FPS = 60
 
 # Window
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+manager = pygame_gui.UIManager((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Engine Redo")
 
 # Clock
@@ -54,7 +55,7 @@ def render_text(content: str, font: str, size: int, color, surface, bold=False, 
 
 
 fullscreen = False
-square_size = 50
+square_size = 100
 
 outline_width = square_size//6
 board_surface = pygame.Surface((square_size * 8 + outline_width*2, square_size * 8 + outline_width*2), pygame.SRCALPHA)
@@ -69,8 +70,8 @@ def draw_board():
     pygame.draw.rect(board_surface, BOARD_OUTLINE, pygame.Rect(0, 0, square_size * 8+ outline_width*2, square_size * 8 + outline_width*2), outline_width, 5)
 
 def draw_board_pieces(piece_quality = 50):
+    global pieces
     board = game.get_board()
-    pieces = get_pieces_from_current_pieceset()
     for index, piece in enumerate(board):
         col = index % 8
         row = index // 8
@@ -78,21 +79,43 @@ def draw_board_pieces(piece_quality = 50):
             continue
         board_surface.blit(pieces[piece], (square_size*col+outline_width, square_size*row+outline_width))
 
-
-def get_pieces_from_current_pieceset():
+def get_current_pieceset():
+    global piece_set
     with open(os.path.join("..", "data", "config.json"), 'r') as config_file:
         config_data = json.load(config_file)
         piece_set = config_data.get("piece_set")
-    piece_files = piecesets.load_set(piece_set, scale=1)
-    pieces = {}
+    return piece_set
+
+def get_pieces_from_current_pieceset():
+    piece_set = get_current_pieceset()
+    piece_sizes = {
+        'alpha': (2048, 2048),
+        'cburnett': (45, 45),
+        'mpchess': (38, 38),
+        'pixel': (16, 16),
+        'tatiana': (189, 189)
+        }
+    piece_files: dict[str: pygame.Surface] = piecesets.load_set(piece_set, dpi=300)
+    surfaces = {}
     # Removes the first letter, classifying by the FEN notation the pieces
     for key, value in piece_files.items():
         new_key = key
         if key[0].lower() == 'b':
             new_key = new_key.lower()
         new_key = new_key[1:]
-        pieces[new_key] = value
-    return pieces
+        if piece_set == 'alpha': value = pygame.transform.scale_by(value, 0.05)
+        if piece_set == 'cburnett': value = pygame.transform.scale_by(value, 2.15)
+        if piece_set == 'mpchess': value = pygame.transform.scale_by(value, 0.82)
+        if piece_set == 'pixel': value = pygame.transform.scale_by(value, 6)
+        if piece_set == 'tatiana': value = pygame.transform.scale_by(value, 0.17)
+        surfaces[new_key] = value
+    return surfaces
+
+def set_pieceset(name):
+    if name not in piecesets.list_sets().keys():  raise Exception('pieceset not found')
+    with open(os.path.join("..", "data", "config.json"), 'w') as config_file:
+        json.dump({"piece_set": str(name)}, config_file)
+
 
 
 def draw_full_board():
@@ -103,11 +126,25 @@ def draw_full_board():
     else:
         screen.blit(board_surface, (F_WIDTH/2-board_surface.get_width()/2, F_HEIGHT/2-board_surface.get_height()/2))
 
+def reload_pieces():
+    global pieces
+    pieces = get_pieces_from_current_pieceset()
+
 game = game.Game()
+fps = 0
+reload_pieces()
+
+
+
+piece_set = get_current_pieceset()
+
+change_pieceset = pygame_gui.elements.UIDropDownMenu(piecesets.list_sets().keys(), piece_set, pygame.Rect(0, 0, 100, 40), manager)
 
 # Main loop
 while running:
+    dt = fps/1000
     for event in pygame.event.get():
+        manager.process_events(event)
         if event.type == pygame.QUIT:
             # From all events if user exits
             running = False
@@ -116,11 +153,19 @@ while running:
                 fullscreen = not fullscreen
                 if fullscreen:
                     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                    manager = pygame_gui.UIManager((F_WIDTH, F_HEIGHT))
                 else:
                     screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+                    manager = pygame_gui.UIManager((WIDTH, HEIGHT))
+        if event.type == pygame_gui.UI_DROP_DOWN_MENU_CHANGED:
+            if event.ui_element == change_pieceset:
+                set_pieceset(event.text)
+                reload_pieces()
 
     # Debug fill
     screen.fill("purple")
+
+    manager.update(dt)
 
     if fullscreen:
         width, height = F_WIDTH, F_HEIGHT
@@ -132,6 +177,8 @@ while running:
     render_text('Chess Engine Redo', "couriernew", 52, TEXT_COLOR, screen, bold=True, x=0, y=10)
 
     draw_full_board()
+
+    manager.draw_ui(screen)
 
     # Fps tick and screen update
     fps = clock.tick(FPS)
