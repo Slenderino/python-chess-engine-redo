@@ -231,13 +231,16 @@ while running:
         if event.type == pygame.QUIT:
             # From all events if user exits
             running = False
-        if event.type == pygame.KEYDOWN:
+        elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_F11:
                 fullscreen = not fullscreen  # Invert fullscreen
                 if fullscreen:
                     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
                 else:
                     screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+            elif event.key == pygame.K_r:
+                # Reload pieces
+                reload_pieces()
 
     # Debug fill
     screen.fill("purple")
