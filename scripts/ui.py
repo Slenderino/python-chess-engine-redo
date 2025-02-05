@@ -4,7 +4,7 @@ import game
 import piecesets
 import json
 
-TEXT_COLOR = '#8E4A49'
+TEXT_COLOR = '#FFFFFF'
 BOARD_OUTLINE = '#5F464B'
 BACKGROUND_COLOR = "#3a606e"
 LIGHT_SQUARE = "#828E82"
@@ -148,6 +148,15 @@ reload_pieces()
 
 piece_set = get_current_pieceset()
 
+right_gui_surface = pygame.Surface((400, 832), pygame.SRCALPHA)
+
+
+def draw_right_gui():
+    pygame.draw.rect(right_gui_surface, BOARD_OUTLINE, ((0, 0), right_gui_surface.get_size()), border_radius=5)
+    piece_set_properties = get_text_properties('Piece Set:', 'couriernew', 24, bold=True).get_size()
+    render_text('Piece Set:', 'couriernew', 24, TEXT_COLOR, right_gui_surface, True, x=piece_set_properties[0]//5, y=piece_set_properties[1])
+    screen.blit(right_gui_surface, (current_width - 410, (70 + current_height - 900) / 2))
+
 
 # Main loop
 while running:
@@ -177,6 +186,8 @@ while running:
     render_text('Chess Engine Redo', "couriernew", 52, TEXT_COLOR, screen, bold=True, x=0, y=10)
 
     draw_full_board()
+
+    draw_right_gui()
 
     # Fps tick and screen update
     fps = clock.tick(FPS)
