@@ -1,7 +1,5 @@
 import pygame
 import os
-from svgpathtools import svg2paths, Line, CubicBezier, Arc
-import xml.etree.ElementTree as ET
 
 def svg_to_pygame_surface(svg_path, size=None, dpi=90):
     """
@@ -51,16 +49,6 @@ def svg_to_pygame_surface(svg_path, size=None, dpi=90):
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
-def parse_fill_color(color_str):
-    """Parses a fill color from an SVG style string (e.g., #ff0000 or rgb(255, 0, 0))"""
-    if color_str.startswith('#'):
-        return tuple(int(color_str[i:i+2], 16) for i in (1, 3, 5))  # #RRGGBB
-    elif color_str.startswith('rgb'):
-        color_values = color_str[color_str.index('(') + 1:color_str.index(')')].split(',')
-        return tuple(int(c.strip()) for c in color_values)
-    else:
-        return (255, 255, 255)  # Color por defecto si no se puede parsear
-
 
 def list_sets():
     sets_location = os.path.join("..", "data", "sets")
@@ -70,11 +58,11 @@ def load_set(name, size=None, dpi=90) -> dict[str: pygame.Surface]:
     sets = list_sets()
     if not name in sets:
         raise Exception("Set not found")
-    set_dir = sets[name]
-    images = os.listdir(set_dir)
+    set_dir = sets[name]  # set directory name
+    images = os.listdir(set_dir)  # images files
     surfaces = {}
     for file in images:
-        path = os.path.join(set_dir, file)
+        path = os.path.join(set_dir, file)  # get image path
         if path.endswith(".svg"):
             surfaces[os.path.splitext(file)[0]] = svg_to_pygame_surface(path, size, dpi)
         elif path.endswith(".png"):
