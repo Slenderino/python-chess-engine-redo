@@ -3,7 +3,6 @@ import os
 import game
 import piecesets
 import json
-import pygame_gui
 
 TEXT_COLOR = '#8E4A49'
 BOARD_OUTLINE = '#5F464B'
@@ -24,8 +23,7 @@ F_WIDTH, F_HEIGHT = 1680, 1050
 FPS = 60
 
 # Window
-screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
-manager = pygame_gui.UIManager((WIDTH, HEIGHT))
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE | pygame.SRCALPHA)
 pygame.display.set_caption("Chess Engine Redo")
 
 # Clock
@@ -51,6 +49,11 @@ def render_text(content: str, font: str, size: int, color, surface, bold=False, 
     else:
         textpos = text.get_rect(x=x, y=y)
     surface.blit(text, textpos)
+    return text
+
+def get_text_properties(content: str, font: str, size: int, color=(0, 0, 0, 0), bold=False):
+    font = pygame.font.SysFont(font, size, bold)
+    text = font.render(content, True, color)
     return text
 
 
@@ -128,23 +131,28 @@ def draw_full_board():
 
 def reload_pieces():
     global pieces
+    pygame.draw.rect(screen, 'teal', pygame.Rect(((WIDTH - 750) / 2), ((HEIGHT - 150) / 2) - 40, 750, 150))
+    text_width = get_text_properties('Please wait while the pieceset is loading.\nThis wait time varies heavily on the pieceset,\nbut it should take no longer than 5 seconds.',
+                'couriernew', 25, (0, 0, 0, 0)).get_size()
+    render_text(
+        'Please wait while the pieceset is loading.\nThis wait time varies heavily on the pieceset,\nbut it should take no longer than 5 seconds.',
+        'couriernew',
+        25,
+        'black',
+        screen, x=WIDTH//2-text_width[0]//2, y=HEIGHT//2-text_width[1]//2-40)
+    pygame.display.flip()
     pieces = get_pieces_from_current_pieceset()
 
 game = game.Game()
-fps = 0
 reload_pieces()
-
-
 
 piece_set = get_current_pieceset()
 
-change_pieceset = pygame_gui.elements.UIDropDownMenu(piecesets.list_sets().keys(), piece_set, pygame.Rect(0, 0, 100, 40), manager)
 
 # Main loop
 while running:
-    dt = fps/1000
+    global current_width, current_height
     for event in pygame.event.get():
-        manager.process_events(event)
         if event.type == pygame.QUIT:
             # From all events if user exits
             running = False
@@ -153,32 +161,22 @@ while running:
                 fullscreen = not fullscreen
                 if fullscreen:
                     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-                    manager = pygame_gui.UIManager((F_WIDTH, F_HEIGHT))
                 else:
                     screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
-                    manager = pygame_gui.UIManager((WIDTH, HEIGHT))
-        if event.type == pygame_gui.UI_DROP_DOWN_MENU_CHANGED:
-            if event.ui_element == change_pieceset:
-                set_pieceset(event.text)
-                reload_pieces()
 
     # Debug fill
     screen.fill("purple")
 
-    manager.update(dt)
-
     if fullscreen:
-        width, height = F_WIDTH, F_HEIGHT
+        current_width, current_height = F_WIDTH, F_HEIGHT
     else:
-        width, height = WIDTH, HEIGHT
+        current_width, current_height = WIDTH, HEIGHT
 
-    pygame.draw.rect(screen, BACKGROUND_COLOR, (0, 0, width, height))
+    pygame.draw.rect(screen, BACKGROUND_COLOR, (0, 0, current_width, current_height))
 
     render_text('Chess Engine Redo', "couriernew", 52, TEXT_COLOR, screen, bold=True, x=0, y=10)
 
     draw_full_board()
-
-    manager.draw_ui(screen)
 
     # Fps tick and screen update
     fps = clock.tick(FPS)

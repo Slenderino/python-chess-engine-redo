@@ -36,7 +36,6 @@ def svg_to_pygame_surface(svg_path, size=None, dpi=90):
 
         # Ejecutar rsvg-convert
         subprocess.run(cmd, check=True)
-        print(cmd)
 
         # Cargar el PNG con Pygame
         surface = pygame.image.load(tmp_path)
