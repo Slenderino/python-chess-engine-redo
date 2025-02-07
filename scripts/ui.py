@@ -61,7 +61,8 @@ fullscreen = False
 square_size = 100
 
 outline_width = square_size//6
-board_surface = pygame.Surface((square_size * 8 + outline_width*2, square_size * 8 + outline_width*2), pygame.SRCALPHA)
+board_surface_size = (square_size * 8 + outline_width*2, square_size * 8 + outline_width*2)
+board_surface = pygame.Surface(board_surface_size, pygame.SRCALPHA)
 
 def draw_board():
     for i in range(64):
@@ -74,16 +75,24 @@ def draw_board():
     # Outline
     pygame.draw.rect(board_surface, BOARD_OUTLINE, pygame.Rect(0, 0, square_size * 8+ outline_width*2, square_size * 8 + outline_width*2), outline_width, 5)
 
-def draw_board_pieces(piece_quality = 50):
+def draw_board_pieces(game):
     global pieces
-    board = game.get_board()
+    state = game.get_board().fen
+    board = state.split()[0]
     # Board contiene el estado del tablero actual
-    for index, piece in enumerate(board):
-        col = index % 8
-        row = index // 8
-        if piece == ' ':  # Espacio en blanco
-            continue
-        board_surface.blit(pieces[piece], (square_size*col+outline_width, square_size*row+outline_width))
+    col = 0
+    row = 0
+    for char in board:
+        if char == '/':
+            row+=1
+            col=0
+        elif char.isdecimal():
+            col+=int(char)
+        else:
+            row+=col//8
+            col=col%8
+            board_surface.blit(pieces[char], (outline_width+square_size*col, outline_width+square_size*row))
+            col+=1
 
 def get_current_pieceset():
     global piece_set
@@ -125,15 +134,15 @@ def set_pieceset(name):
     with open(os.path.join("..", "data", "config.json"), 'w') as config_file:
         json.dump({"piece_set": str(name)}, config_file)
 
-
-
-def draw_full_board():
+def draw_full_board(local_width, local_heigth, game):
+    global board_rect
     draw_board()
-    draw_board_pieces()
-    if not fullscreen:
-        screen.blit(board_surface, (WIDTH/2-board_surface.get_width()/2, HEIGHT/2-board_surface.get_height()/2))
-    else:
-        screen.blit(board_surface, (F_WIDTH/2-board_surface.get_width()/2, F_HEIGHT/2-board_surface.get_height()/2))
+    draw_board_pieces(game)
+    board_surface_dest = (local_width / 2 - board_surface.get_width() / 2, local_heigth / 2 - board_surface.get_height() / 2)
+    board_rect = (board_surface_dest[0]+outline_width, board_surface_dest[1]+outline_width, board_surface_size[0]-outline_width*2, board_surface_size[1]-outline_width*2)
+    screen.blit(board_surface, board_surface_dest)
+
+
 
 def reload_pieces():
     global pieces
@@ -161,9 +170,15 @@ piece_set = get_current_pieceset()
 right_gui_surface = pygame.Surface((400, 832), pygame.SRCALPHA)
 
 mouse_on_pieceset_selection = False
+open_dropdown = False
+mouse_on_dropdown_name = None
 pieceset_selection_button_rect = (0, 0, 0, 0)
+piecesets_dropdown = {}
 
+board_rect = (0, 0, 0, 0)
+draw_full_board(WIDTH, HEIGHT, game)
 
+game_overlay_surface = pygame.Surface((board_rect[2], board_rect[3]), pygame.SRCALPHA)
 
 def draw_right_gui():
     global pieceset_selection_button_rect
@@ -198,30 +213,57 @@ def draw_right_gui():
                                                         (pieceset_selection_button_rect[0]+pieceset_selection_button_rect[2]/3*2, pieceset_selection_button_rect[1]+pieceset_selection_button_rect[3]/3),
                                                         (pieceset_selection_button_rect[0]+pieceset_selection_button_rect[2]/2, pieceset_selection_button_rect[1]+pieceset_selection_button_rect[3]/3*2)))
 
+    if open_dropdown: handle_piecesets_dropdown()
+
     # Finalmente dibujamos la superficie a la pantalla, con un offset que la dejará siempre al costado del tablero
     screen.blit(right_gui_surface, (current_width - 410, (70 + current_height - 900) / 2))
 
+def handle_piecesets_dropdown():
+    piecesets_list = piecesets.list_sets().keys()
+    piece_set_text_width_height = get_text_properties('Piece Set:', 'couriernew', 24, bold=True).get_size()
+    for idx, pieceset in enumerate(piecesets_list):
+        pieceset_rect = (
+            piece_set_text_width_height[0]*1.4,  # Same x for every rect
+            (piece_set_text_width_height[1]-3)*(2+idx)-(3*idx),  # Adding 24 for every pieceset
+            123, 24  # Final width and height
+        )
+        if mouse_on_dropdown_name:
+            current_dropdown = mouse_on_dropdown_name
+        else:
+            current_dropdown = None
+        piecesets_dropdown[pieceset] = pieceset_rect
+        pygame.draw.rect(right_gui_surface, '#5b2723' if current_dropdown == pieceset else '#663521', pieceset_rect, border_radius=5)
+        render_text(pieceset, 'couriernew', 24, TEXT_COLOR, right_gui_surface, True, x=pieceset_rect[0]+5, y=pieceset_rect[1])
+
 
 def handle_mouse_detection():
-    global mouse_on_pieceset_selection
+    global mouse_on_pieceset_selection, mouse_on_dropdown_name
     mouse_pos = pygame.mouse.get_pos()
     right_gui_surface_dest = (current_width - 410, (70 + current_height - 900) / 2)
     pieceset_selection_button_rect_coords = (pieceset_selection_button_rect[0] + right_gui_surface_dest[0],  # Relative coords + offset = absolute coords
                                              pieceset_selection_button_rect[1] + right_gui_surface_dest[1],  # Relativa coords + offset = absolute coords
-                                             pieceset_selection_button_rect[0] + pieceset_selection_button_rect[2] +  # Relative coords + width + offset = absolute coords
-                                             right_gui_surface_dest[0],
-                                             pieceset_selection_button_rect[1] + pieceset_selection_button_rect[3] +  # Relative coords + width + offset = absolute coords
-                                             right_gui_surface_dest[1])
-    if pieceset_selection_button_rect_coords[0] < mouse_pos[0] and mouse_pos[0] < pieceset_selection_button_rect_coords[
-        2]:  # if mouse x inbetween the button
-        if pieceset_selection_button_rect_coords[1] < mouse_pos[1] and mouse_pos[1] < \
-                pieceset_selection_button_rect_coords[3]:  # if mouse y inbetween the button
-            # Both mouse x and y are inside the button, the mouse is hovering the button
-            mouse_on_pieceset_selection = True
-        else:
-            mouse_on_pieceset_selection = False
-    else:
-        mouse_on_pieceset_selection = False
+                                             pieceset_selection_button_rect[2],  # width
+                                             pieceset_selection_button_rect[3]  # height
+                                             )
+    mouse_on_pieceset_selection = is_mouse_on_rect(pieceset_selection_button_rect_coords)
+    clear = True
+    for option, rect in piecesets_dropdown.items():
+        if is_mouse_on_rect(rect, right_gui_surface_dest):
+            mouse_on_dropdown_name = option
+            clear = False
+            break
+    if clear: mouse_on_dropdown_name = None
+
+def is_mouse_on_rect(rect: pygame.Rect | tuple[float, float, float, float], offset: None | tuple[float, float]=None) -> bool:
+    if isinstance(rect, pygame.Rect):
+        return rect.collidepoint(pygame.mouse.get_pos())
+
+    x, y, width, height = rect
+    if offset:
+        x+= offset[0]
+        y+= offset[1]
+    mx, my = pygame.mouse.get_pos()
+    return x <= mx <= x + width and y <= my <= y + height
 
 
 # Main loop
@@ -241,6 +283,13 @@ while running:
             elif event.key == pygame.K_r:
                 # Reload pieces
                 reload_pieces()
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if mouse_on_pieceset_selection:
+                open_dropdown = not open_dropdown
+            elif open_dropdown and mouse_on_dropdown_name:
+                open_dropdown = False
+                set_pieceset(mouse_on_dropdown_name)
+                reload_pieces()
 
     # Debug fill
     screen.fill("purple")
@@ -257,7 +306,9 @@ while running:
 
     render_text('Chess Engine Redo', "couriernew", 52, TEXT_COLOR, screen, bold=True, x=0, y=10)
 
-    draw_full_board()
+    draw_full_board(current_width, current_height, game)
+
+    screen.blit(game_overlay_surface, (board_rect[0], board_rect[1]))
 
     draw_right_gui()
 
