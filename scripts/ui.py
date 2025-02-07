@@ -70,7 +70,7 @@ def draw_board():
         row = i // 8  # - - - - - - - -
         # Se calcula el color de la casilla en base a la regla de que si la fila y columna sumadas son pares entonces la casilla es blanca
         pygame.draw.rect(board_surface, (LIGHT_SQUARE if (col + row)%2 == 0 else DARK_SQUARE),
-                         # Se dibuja la casilla, en su columna y fila correspondiente, ajustada a el outline
+                         # Se dibuja la casilla, en su columna y fila correspondiente, ajustada al outline
                          pygame.Rect(square_size*col+outline_width, square_size*row+outline_width, square_size, square_size))
     # Outline
     pygame.draw.rect(board_surface, BOARD_OUTLINE, pygame.Rect(0, 0, square_size * 8+ outline_width*2, square_size * 8 + outline_width*2), outline_width, 5)
@@ -118,7 +118,7 @@ def get_pieces_from_current_pieceset():
         new_key = key
         if key[0].lower() == 'b':  # De ser negra la pieza se convierte a minúscula
             new_key = new_key.lower()
-        new_key = new_key[1:]  # Quitar el color a la pieza, puesto a que lo define si esta en mayúscula o no
+        new_key = new_key[1:]  # Quitar el color a la pieza, puesto a que lo define si está en mayúscula o no
 
         # Ajustar dimensiones por pieceset
         if piece_set == 'alpha': value = pygame.transform.scale_by(value, 0.05)
@@ -134,11 +134,11 @@ def set_pieceset(name):
     with open(os.path.join("..", "data", "config.json"), 'w') as config_file:
         json.dump({"piece_set": str(name)}, config_file)
 
-def draw_full_board(local_width, local_heigth, game):
+def draw_full_board(local_width, local_height, game):
     global board_rect
     draw_board()
     draw_board_pieces(game)
-    board_surface_dest = (local_width / 2 - board_surface.get_width() / 2, local_heigth / 2 - board_surface.get_height() / 2)
+    board_surface_dest = (local_width / 2 - board_surface.get_width() / 2, local_height / 2 - board_surface.get_height() / 2)
     board_rect = (board_surface_dest[0]+outline_width, board_surface_dest[1]+outline_width, board_surface_size[0]-outline_width*2, board_surface_size[1]-outline_width*2)
     screen.blit(board_surface, board_surface_dest)
 
@@ -205,17 +205,17 @@ def draw_right_gui():
     # Establecemos el rect del botón que va a abrir el menú dropdown en una variable aparte, esto para que en el main loop se pueda verificar si el mouse se encuentra adentro o no
     pieceset_selection_button_rect = (piece_set_text_width_height[0]*1.4+selection_rect.width, piece_set_text_width_height[1], 24, 24)
 
-    # Dibujamos el rect del botón, con el color dependediendo de si tiene el mouse encima o no
+    # Dibujamos el rect del botón, con el color dependiendo de si tiene el mouse encima o no
     pygame.draw.rect(right_gui_surface, ('#5b2723' if mouse_on_pieceset_selection else '#663521'), pieceset_selection_button_rect, border_radius=2)
 
-    # Dibujamos el triangulo para abajo con coordenadas relativas a al botón
+    # Dibujamos el triángulo para abajo con coordenadas relativas a al botón
     pygame.draw.polygon(right_gui_surface, TEXT_COLOR, ((pieceset_selection_button_rect[0]+pieceset_selection_button_rect[2]/3, pieceset_selection_button_rect[1]+pieceset_selection_button_rect[3]/3),
                                                         (pieceset_selection_button_rect[0]+pieceset_selection_button_rect[2]/3*2, pieceset_selection_button_rect[1]+pieceset_selection_button_rect[3]/3),
                                                         (pieceset_selection_button_rect[0]+pieceset_selection_button_rect[2]/2, pieceset_selection_button_rect[1]+pieceset_selection_button_rect[3]/3*2)))
 
     if open_dropdown: handle_piecesets_dropdown()
 
-    # Finalmente dibujamos la superficie a la pantalla, con un offset que la dejará siempre al costado del tablero
+    # Finalmente, dibujamos la superficie a la pantalla, con un offset que la dejará siempre al costado del tablero
     screen.blit(right_gui_surface, (current_width - 410, (70 + current_height - 900) / 2))
 
 def handle_piecesets_dropdown():
