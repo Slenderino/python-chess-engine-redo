@@ -1,14 +1,12 @@
 import pygame
 import os
-import game
-import piecesets
+import game, piecesets, board
 import json
 
 TEXT_COLOR = '#FFFFFF'
 BOARD_OUTLINE = '#5F464B'
 BACKGROUND_COLOR = "#3a606e"
-LIGHT_SQUARE = "#828E82"
-DARK_SQUARE = "#607B7D"
+
 
 # Initialization
 os.environ['SDL_VIDEO_WINDOW_POS'] = "0,30"
@@ -56,43 +54,7 @@ def get_text_properties(content: str, font: str, size: int, color=(0, 0, 0, 0), 
     text = font.render(content, True, color)
     return text
 
-
 fullscreen = False
-square_size = 100
-
-outline_width = square_size//6
-board_surface_size = (square_size * 8 + outline_width*2, square_size * 8 + outline_width*2)
-board_surface = pygame.Surface(board_surface_size, pygame.SRCALPHA)
-
-def draw_board():
-    for i in range(64):
-        col = i % 8  # | | | | | | | |
-        row = i // 8  # - - - - - - - -
-        # Se calcula el color de la casilla en base a la regla de que si la fila y columna sumadas son pares entonces la casilla es blanca
-        pygame.draw.rect(board_surface, (LIGHT_SQUARE if (col + row)%2 == 0 else DARK_SQUARE),
-                         # Se dibuja la casilla, en su columna y fila correspondiente, ajustada al outline
-                         pygame.Rect(square_size*col+outline_width, square_size*row+outline_width, square_size, square_size))
-    # Outline
-    pygame.draw.rect(board_surface, BOARD_OUTLINE, pygame.Rect(0, 0, square_size * 8+ outline_width*2, square_size * 8 + outline_width*2), outline_width, 5)
-
-def draw_board_pieces(game):
-    global pieces
-    state = game.get_board().fen
-    board = state.split()[0]
-    # Board contiene el estado del tablero actual
-    col = 0
-    row = 0
-    for char in board:
-        if char == '/':
-            row+=1
-            col=0
-        elif char.isdecimal():
-            col+=int(char)
-        else:
-            row+=col//8
-            col=col%8
-            board_surface.blit(pieces[char], (outline_width+square_size*col, outline_width+square_size*row))
-            col+=1
 
 def get_current_pieceset():
     global piece_set
@@ -134,16 +96,6 @@ def set_pieceset(name):
     with open(os.path.join("..", "data", "config.json"), 'w') as config_file:
         json.dump({"piece_set": str(name)}, config_file)
 
-def draw_full_board(local_width, local_height, game):
-    global board_rect
-    draw_board()
-    draw_board_pieces(game)
-    board_surface_dest = (local_width / 2 - board_surface.get_width() / 2, local_height / 2 - board_surface.get_height() / 2)
-    board_rect = (board_surface_dest[0]+outline_width, board_surface_dest[1]+outline_width, board_surface_size[0]-outline_width*2, board_surface_size[1]-outline_width*2)
-    screen.blit(board_surface, board_surface_dest)
-
-
-
 def reload_pieces():
     global pieces
 
@@ -176,7 +128,6 @@ pieceset_selection_button_rect = (0, 0, 0, 0)
 piecesets_dropdown = {}
 
 board_rect = (0, 0, 0, 0)
-draw_full_board(WIDTH, HEIGHT, game)
 
 game_overlay_surface = pygame.Surface((board_rect[2], board_rect[3]), pygame.SRCALPHA)
 
@@ -265,7 +216,6 @@ def is_mouse_on_rect(rect: pygame.Rect | tuple[float, float, float, float], offs
     mx, my = pygame.mouse.get_pos()
     return x <= mx <= x + width and y <= my <= y + height
 
-
 # Main loop
 while running:
     global current_width, current_height
@@ -306,7 +256,8 @@ while running:
 
     render_text('Chess Engine Redo', "couriernew", 52, TEXT_COLOR, screen, bold=True, x=0, y=10)
 
-    draw_full_board(current_width, current_height, game)
+    board_surface, board_surface_dest = board.get_baked_board_surface(pygame, BOARD_OUTLINE, game, pieces, (current_width, current_height))
+    screen.blit(board_surface, board_surface_dest)
 
     screen.blit(game_overlay_surface, (board_rect[0], board_rect[1]))
 
