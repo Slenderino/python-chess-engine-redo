@@ -129,8 +129,6 @@ piecesets_dropdown = {}
 
 board_rect = (0, 0, 0, 0)
 
-game_overlay_surface = pygame.Surface((board_rect[2], board_rect[3]), pygame.SRCALPHA)
-
 def draw_right_gui():
     global pieceset_selection_button_rect
     #Dibujar el outline
@@ -227,9 +225,9 @@ while running:
             if event.key == pygame.K_F11:
                 fullscreen = not fullscreen  # Invert fullscreen
                 if fullscreen:
-                    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN | pygame.SRCALPHA)
                 else:
-                    screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
+                    screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE | pygame.SRCALPHA)
             elif event.key == pygame.K_r:
                 # Reload pieces
                 reload_pieces()
@@ -256,10 +254,9 @@ while running:
 
     render_text('Chess Engine Redo', "couriernew", 52, TEXT_COLOR, screen, bold=True, x=0, y=10)
 
-    board_surface, board_surface_dest = board.get_baked_board_surface(pygame, BOARD_OUTLINE, game, pieces, (current_width, current_height))
+    board_surface, board_surface_dest = board.get_baked_board_surface(BOARD_OUTLINE, game, pieces, (current_width, current_height))
     screen.blit(board_surface, board_surface_dest)
 
-    screen.blit(game_overlay_surface, (board_rect[0], board_rect[1]))
 
     draw_right_gui()
 

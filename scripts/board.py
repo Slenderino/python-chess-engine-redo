@@ -1,14 +1,18 @@
+import pygame
+
 SQUARE_SIZE = 100
 LIGHT_SQUARE = "#828E82"
 DARK_SQUARE = "#607B7D"
 
 outline_width = SQUARE_SIZE//6
 board_surface_size = (SQUARE_SIZE * 8 + outline_width*2, SQUARE_SIZE * 8 + outline_width*2)
-def init_surface(pygame):
+
+
+def init_surface():
     board_surface = pygame.Surface(board_surface_size, pygame.SRCALPHA)
     return board_surface
 
-def draw_board(pygame, board_surface, board_outline):
+def draw_board(board_surface, board_outline):
     for i in range(64):
         col = i % 8  # | | | | | | | |
         row = i // 8  # - - - - - - - -
@@ -38,12 +42,35 @@ def draw_board_pieces(game, board_surface, pieces):
             col+=1
 
 
-def get_baked_board_surface(pygame, board_outline, game, pieces, local_wh):
-    local_width, local_height = local_wh
-    board_surface = init_surface(pygame)
-    draw_board(pygame, board_surface, board_outline)
-    draw_board_pieces(game, board_surface, pieces)
+def get_baked_board_surface(board_outline, game, pieces, local_width_height):
+    local_width, local_height = local_width_height
+    board_surface = init_surface()
     board_surface_dest = (local_width / 2 - board_surface.get_width() / 2, local_height / 2 - board_surface.get_height() / 2)
     board_rect = (board_surface_dest[0] + outline_width, board_surface_dest[1] + outline_width,
                   board_surface_size[0] - outline_width * 2, board_surface_size[1] - outline_width * 2)
+
+    draw_board(board_surface, board_outline)
+    draw_board_pieces(game, board_surface, pieces)
+    update(board_rect, board_surface)
     return board_surface, board_surface_dest
+
+
+def update(board_rect, board_surface):
+    # get relative mouse position
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    mouse_x -= board_rect[0]
+    mouse_y -= board_rect[1]
+
+    # check mouse inside board
+    if not (0 < mouse_x < board_rect[2] and 0 < mouse_y < board_rect[3]):
+        # mouse outside
+        return
+
+    # get mouse file and rank
+    mouse_file, mouse_rank = mouse_x // SQUARE_SIZE, mouse_y // SQUARE_SIZE
+
+    overlay_surface = pygame.Surface((board_rect[2], board_rect[3]), pygame.SRCALPHA)
+
+    #higligh mouse square
+    pygame.draw.rect(overlay_surface, (20, 20, 20, 50), (mouse_file * SQUARE_SIZE, mouse_rank * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
+    board_surface.blit(overlay_surface, (outline_width, outline_width))
