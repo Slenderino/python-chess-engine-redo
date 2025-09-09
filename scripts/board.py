@@ -13,6 +13,12 @@ def init_surface():
     return board_surface
 
 def draw_board(board_surface, board_outline):
+    """
+    Draws the board squares on the given surface.
+    :param board_surface: Surface to draw on the squares.
+    :param board_outline: The thickness of the board outline.
+    :return:
+    """
     for i in range(64):
         col = i % 8  # | | | | | | | |
         row = i // 8  # - - - - - - - -
@@ -24,6 +30,13 @@ def draw_board(board_surface, board_outline):
     pygame.draw.rect(board_surface, board_outline, pygame.Rect(0, 0, SQUARE_SIZE * 8 + outline_width * 2, SQUARE_SIZE * 8 + outline_width * 2), outline_width, 5)
 
 def draw_board_pieces(game, board_surface, pieces):
+    """
+    Draws the specified chess pieces from current position in game onto the given surface.
+    :param game: Game from where to get the position.
+    :param board_surface: Surface to draw on the pieces.
+    :param pieces: Pieceset to use.
+    :return:
+    """
     state = game.get_board().fen
     board = state.split()[0]
     # Board contiene el estado del tablero actual
@@ -43,11 +56,19 @@ def draw_board_pieces(game, board_surface, pieces):
 
 
 def get_baked_board_surface(board_outline, game, pieces, local_width_height):
+    """
+    A function designed to instantiate and do all the processing needed for a frame of the board surface
+    :param board_outline: The outline thickness, in px
+    :param game: Game containing current position for the drawing of the pieces
+    :param pieces: Current selected pieceset
+    :param local_width_height: Current dimensions of the window
+    :return: The processed board surface and where to draw it.
+    """
     local_width, local_height = local_width_height
     board_surface = init_surface()
-    board_surface_dest = (local_width / 2 - board_surface.get_width() / 2, local_height / 2 - board_surface.get_height() / 2)
+    board_surface_dest = (local_width / 2 - board_surface.get_width() / 2, local_height / 2 - board_surface.get_height() / 2)  # center the board surface
     board_rect = (board_surface_dest[0] + outline_width, board_surface_dest[1] + outline_width,
-                  board_surface_size[0] - outline_width * 2, board_surface_size[1] - outline_width * 2)
+                  board_surface_size[0] - outline_width * 2, board_surface_size[1] - outline_width * 2)  # gets the usable board rect
 
     draw_board(board_surface, board_outline)
     draw_board_pieces(game, board_surface, pieces)
@@ -56,6 +77,12 @@ def get_baked_board_surface(board_outline, game, pieces, local_width_height):
 
 
 def update(board_rect, board_surface):
+    """
+    Overlays and logic management for the interactable board.
+    :param board_rect: The delimiters of the usable board in contrast with the board entire surface
+    :param board_surface: The surface on which to apply the changes
+    :return:
+    """
     # get relative mouse position
     mouse_x, mouse_y = pygame.mouse.get_pos()
     mouse_x -= board_rect[0]
