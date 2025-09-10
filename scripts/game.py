@@ -1,8 +1,22 @@
 class Game:
+    WHITE = 0b1000
+    BLACK = 0b0000
+
+    PAWN = 0b000
+    KNIGHT = 0b001
+    BISHOP = 0b010
+    ROOK = 0b011
+    QUEEN = 0b100
+    KING = 0b101
+
     def __init__(self):
         self.board = Board()
     def get_board(self):
         return self.board.set_starter()
+    def get_color_to_play(self):
+        return WHITE if self.board.side_to_move == 'w' else BLACK
+    def get_piece_legal_moves(self, square):
+
 class Board:
     def __init__(self, fen=None):
         if fen == None:
@@ -26,6 +40,11 @@ class Board:
         self.full_moves = 1
         return self
 
+    class SQUARE:
+        def __init__(self, pos):
+            self.file = pos[0]
+            self.rank = int(pos[1])
+
     @staticmethod
     def _get_repr(fen) -> list[str]:
         board = fen.split()[0]
@@ -40,3 +59,5 @@ class Board:
                 build.append(char)
         return build
 
+class PieceMoves:
+    def pawn(self, board, pos):

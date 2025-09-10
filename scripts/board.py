@@ -72,15 +72,16 @@ def get_baked_board_surface(board_outline, game, pieces, local_width_height):
 
     draw_board(board_surface, board_outline)
     draw_board_pieces(game, board_surface, pieces)
-    update(board_rect, board_surface)
+    update(board_rect, board_surface, game)
     return board_surface, board_surface_dest
 
 
-def update(board_rect, board_surface):
+def update(board_rect, board_surface, game):
     """
     Overlays and logic management for the interactable board.
     :param board_rect: The delimiters of the usable board in contrast with the board entire surface
     :param board_surface: The surface on which to apply the changes
+    :param game: Game used for getting and displaying legal moves
     :return:
     """
     # get relative mouse position
@@ -96,6 +97,7 @@ def update(board_rect, board_surface):
     # get mouse file and rank
     mouse_file, mouse_rank = mouse_x // SQUARE_SIZE, mouse_y // SQUARE_SIZE
 
+    # define transparent overlay surface
     overlay_surface = pygame.Surface((board_rect[2], board_rect[3]), pygame.SRCALPHA)
 
     #higligh mouse square
