@@ -1,3 +1,6 @@
+from unittest import case
+
+
 class Game:
     WHITE = 0b1000
     BLACK = 0b0000
@@ -31,6 +34,7 @@ class Square:
         return str(Square.FILES[self.file]+self.rank)
 
     def get_offset(self, offset: tuple[int, int]):
+        if not (1 <= self.file+offset[0] <= 8 and 1 <= self.rank+offset[1] <= 8): return None # outside bounds
         return Square(Square.FILES[self.file+offset[0]]+(self.rank+offset[1]))
 
     def to_1dimensional_index(self):
@@ -195,3 +199,139 @@ class PieceMoves:
                     moves.append(Move(pos, board.en_passant_square, board=board))
         return moves
 
+    @staticmethod
+    def non_sliding_piece(board: Board, pos: Square, offsets) -> list[Move]:
+        own_color = board.get_square(pos).color
+        moves = []
+        for target_offset in offsets:
+            new_square = pos.get_offset(target_offset)
+            if not new_square: continue # outside board
+            target_square = board.get_square(new_square)
+            if target_square:
+                # if there's a piece
+                if target_square.color == own_color:
+                    # and is from the ally color, invalidate move
+                    # if statements separated to evade AttributeError when checking None.color
+                    continue
+            # elif theres no piece or its from enemy color, count move
+            moves.append(Move(pos, new_square, board=board))
+        return moves
+
+    @staticmethod
+    def knight(board: Board, pos: Square) -> list[Move]:
+        # hardcoded knight offsets
+        offsets = [(1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1), (-2, 1), (-1, 2)]
+        return PieceMoves.non_sliding_piece(board, pos, offsets)
+
+    @staticmethod
+    def sliding_piece(board: Board, pos: Square, direction_offsets: list[tuple[int, int]]) -> list[Move]:
+        own_color = board.get_square(pos).color
+        moves = []
+        for direction in direction_offsets:
+            # inital offset square
+            current_target_square = pos.get_offset(direction)
+            if not current_target_square: continue # outside board
+            while not board.get_square(current_target_square): # while current square empty
+                # add move option
+                moves.append(Move(pos, current_target_square, board=board))
+                # offset current square
+                current_target_square = current_target_square.get_offset(direction)
+                if not current_target_square: break # reached board end
+            if not current_target_square: continue # reached board end, skip color check
+            # current square not empty
+            # add move anyway if capture
+            if board.get_square(current_target_square).color != own_color:
+                # if enemy piece, capture available
+                moves.append(Move(pos, current_target_square, board=board))
+        return moves
+
+    @staticmethod
+    def bishop(board: Board, pos: Square) -> list[Move]:
+        directions = [(1, 1), (1, -1), (-1, -1), (-1, 1)]
+        return PieceMoves.sliding_piece(board, pos, directions)
+
+    @staticmethod
+    def rook(board: Board, pos: Square) -> list[Move]:
+        directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+        return PieceMoves.sliding_piece(board, pos, directions)
+
+    @staticmethod
+    def queen(board: Board, pos: Square) -> list[Move]:
+        directions = [
+            (0, 1), (1, 0), (0, -1), (-1, 0),  # rook-like
+            (1, 1), (1, -1), (-1, -1), (-1, 1)  # bishop-like
+            ]
+        return PieceMoves.sliding_piece(board, pos, directions)
+
+    @staticmethod
+    def king(board: Board, pos: Square, ignore_castling: bool=False) -> list[Move]:
+        offsets = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (1, -1), (-1, -1), (-1, 1)] # same as queen
+        base_moves = PieceMoves.non_sliding_piece(board, pos, offsets)
+        if ignore_castling: return base_moves
+        castling_moves = []
+        color = board.get_square(pos).color
+        enemy_color = abs(Game.WHITE-color)
+        # king-side castling
+        if board.get_square(pos).fen_piece in board.castling_capabilities:
+            # check clear path
+            if (not board.get_square(pos.get_offset((1, 0)))) and (not board.get_square(pos.get_offset((2, 0)))):
+                # bishop space and knight space unnocupied
+                if ((not PieceMoves.is_square_being_attacked_by_color(board, pos, enemy_color)) # king in peace
+                and (not PieceMoves.is_square_being_attacked_by_color(board, pos.get_offset((1, 0)), enemy_color)) # bishop space in peace
+                and (not PieceMoves.is_square_being_attacked_by_color(board, pos.get_offset((2, 0)), enemy_color))): # knight space in peace
+                    castling_moves.append(Move(pos, pos.get_offset((2, 0)), board=board))
+        # queen-side castling
+        fen = 'q' if color == Game.BLACK else 'Q'
+        if fen in board.castling_capabilities:
+            # check clear path
+            if ((not board.get_square(pos.get_offset((-1, 0)))) # no queen
+            and (not board.get_square(pos.get_offset((-2, 0)))) # no bishop
+            and (not board.get_square(pos.get_offset((-3, 0))))): # no knight
+                # space clear
+                # check for squares not being attacked
+                if ((not PieceMoves.is_square_being_attacked_by_color(board, pos, enemy_color)) # king in peace
+                and (not PieceMoves.is_square_being_attacked_by_color(board, pos.get_offset((-1, 0)), enemy_color)) # queen space in peace
+                and (not PieceMoves.is_square_being_attacked_by_color(board, pos.get_offset((-2, 0))), enemy_color)):  # bishop space in peace
+                    # no knight needed, king does not traverse there
+                    castling_moves.append(Move(pos, pos.get_offset((-2, 0)), board=board))
+
+        return base_moves + castling_moves
+
+    @staticmethod
+    def generate_moves(board: Board, pos: Square, ignore_castling: bool=False) -> list[Move]:
+        piece_type = board.get_square(pos).engine_piece
+        match piece_type:
+            case Game.PAWN:
+                return PieceMoves.pawn(board, pos)
+            case Game.KNIGHT:
+                return PieceMoves.knight(board, pos)
+            case Game.BISHOP:
+                return PieceMoves.bishop(board, pos)
+            case Game.ROOK:
+                return PieceMoves.rook(board, pos)
+            case Game.QUEEN:
+                return PieceMoves.queen(board, pos)
+            case Game.KING:
+                # ignore castling to avoid infinite recursion, castling irrelevant for controlling squares
+                return PieceMoves.king(board, pos, ignore_castling)
+            case _:
+                return []
+
+    @staticmethod
+    def is_square_being_attacked_by_color(board: Board, square: Square, color: int) -> bool:
+        files = "abcdefgh"
+        ranks = range(1, 9)
+        # loop all squares
+        squares = []
+        for file in files:
+            for rank in ranks:
+                squares.append(Square(file+str(rank)))
+        for current_square in squares:
+            # for each square in board
+            if board.get_square(current_square):
+                if board.get_square(current_square).color == color:
+                    # target square has a piece of the correct color to check
+                    for move in PieceMoves.generate_moves(board, current_square, True):
+                        # for each possible move with that piece, if that move target end square matches, color controls square
+                        if move.end_square == square: return True
+        return False
