@@ -40,6 +40,17 @@ class Square:
     def to_1dimensional_index(self):
         return self.file-1 + (8-self.rank)*8
 
+    @staticmethod
+    def all_squares() -> list[Square]:
+        files = Square.FILES[1:]
+        ranks = range(1, 9)
+        squares = []
+        for file in files:
+            for rank in ranks:
+                squares.append(Square(file+str(rank)))
+        return squares
+
+
 class Piece:
     def __init__(self, piece: str | int):
         if type(piece) is str:
@@ -132,6 +143,51 @@ class Board:
         rank = 8-rank # 8th rank in chess is the top rank, counting from top to bottom means its the first rank
         return self.array[rank*8:rank*8+8]
 
+    def is_square_being_attacked_by_color(self, square: Square, color: int) -> bool:
+        files = "abcdefgh"
+        ranks = range(1, 9)
+        # loop all squares
+        squares = Square.all_squares()
+        for current_square in squares:
+            # for each square in board
+            if self.get_square(current_square):
+                if self.get_square(current_square).color == color:
+                    # target square has a piece of the correct color to check
+                    for move in PieceMoves.generate_moves(self, current_square, True):
+                        # for each possible move with that piece, if that move target end square matches, color controls square
+                        if move.end_square == square: return True
+        return False
+
+    def instances_of_piece(self, piece: Piece) -> list[Square]:
+        instances = []
+        for square in Square.all_squares():
+            if self.get_square(square) == piece:
+                instances.append(square)
+        return instances
+
+    def pieces_mask(self, color: int) -> list[bool]:
+        mask = []
+        for square in Square.all_squares():
+            if self.get_square(square):
+                if self.get_square(square).color == color:
+                    mask.append(True)
+                    continue
+            mask.append(False)
+        return mask
+
+    def generate_legal_moves(self) -> list[Move]:
+        legal_moves = []
+        color = self.side_to_move
+        mask = self.pieces_mask(color)
+        for square in Square.all_squares():
+            if mask[square.to_1dimensional_index()]:
+                legal_moves += PieceMoves.generate_moves(self, square)
+        # TODO: filter illegal moves, that can be done making the move, and seeing if that leaves the king in check
+
+    def branch_move(self, move: Move) -> Board:
+        # TODO: return a copy of the board with the move made, update fen in the copy accordingly
+        ...
+
 class Move:
     def __init__(self, start_square: Square, end_square: Square, promotion: Piece | None=None, board: Board=None):
         self.start_square = start_square
@@ -146,6 +202,13 @@ class Move:
 
 
 class PieceMoves:
+    @staticmethod
+    def disambiguate_for(move: Move):
+        # TODO: complete legal move generation
+        ...
+
+    # TODO: write perft function (https://www.chessprogramming.org/Perft)
+
     @staticmethod
     def pawn(board: Board, pos: Square) -> list[Move]:
         # Error checking
@@ -276,9 +339,9 @@ class PieceMoves:
             # check clear path
             if (not board.get_square(pos.get_offset((1, 0)))) and (not board.get_square(pos.get_offset((2, 0)))):
                 # bishop space and knight space unnocupied
-                if ((not PieceMoves.is_square_being_attacked_by_color(board, pos, enemy_color)) # king in peace
-                and (not PieceMoves.is_square_being_attacked_by_color(board, pos.get_offset((1, 0)), enemy_color)) # bishop space in peace
-                and (not PieceMoves.is_square_being_attacked_by_color(board, pos.get_offset((2, 0)), enemy_color))): # knight space in peace
+                if ((not board.is_square_being_attacked_by_color(pos, enemy_color)) # king in peace
+                and (not board.is_square_being_attacked_by_color(pos.get_offset((1, 0)), enemy_color)) # bishop space in peace
+                and (not board.is_square_being_attacked_by_color(pos.get_offset((2, 0)), enemy_color))): # knight space in peace
                     castling_moves.append(Move(pos, pos.get_offset((2, 0)), board=board))
         # queen-side castling
         fen = 'q' if color == Game.BLACK else 'Q'
@@ -289,9 +352,9 @@ class PieceMoves:
             and (not board.get_square(pos.get_offset((-3, 0))))): # no knight
                 # space clear
                 # check for squares not being attacked
-                if ((not PieceMoves.is_square_being_attacked_by_color(board, pos, enemy_color)) # king in peace
-                and (not PieceMoves.is_square_being_attacked_by_color(board, pos.get_offset((-1, 0)), enemy_color)) # queen space in peace
-                and (not PieceMoves.is_square_being_attacked_by_color(board, pos.get_offset((-2, 0))), enemy_color)):  # bishop space in peace
+                if ((not board.is_square_being_attacked_by_color(pos, enemy_color)) # king in peace
+                and (not board.is_square_being_attacked_by_color(pos.get_offset((-1, 0)), enemy_color)) # queen space in peace
+                and (not board.is_square_being_attacked_by_color(pos.get_offset((-2, 0))), enemy_color)):  # bishop space in peace
                     # no knight needed, king does not traverse there
                     castling_moves.append(Move(pos, pos.get_offset((-2, 0)), board=board))
 
@@ -316,22 +379,3 @@ class PieceMoves:
                 return PieceMoves.king(board, pos, ignore_castling)
             case _:
                 return []
-
-    @staticmethod
-    def is_square_being_attacked_by_color(board: Board, square: Square, color: int) -> bool:
-        files = "abcdefgh"
-        ranks = range(1, 9)
-        # loop all squares
-        squares = []
-        for file in files:
-            for rank in ranks:
-                squares.append(Square(file+str(rank)))
-        for current_square in squares:
-            # for each square in board
-            if board.get_square(current_square):
-                if board.get_square(current_square).color == color:
-                    # target square has a piece of the correct color to check
-                    for move in PieceMoves.generate_moves(board, current_square, True):
-                        # for each possible move with that piece, if that move target end square matches, color controls square
-                        if move.end_square == square: return True
-        return False
