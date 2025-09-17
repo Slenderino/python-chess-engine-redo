@@ -1,6 +1,3 @@
-from unittest import case
-
-
 class Game:
     WHITE = 0b1000
     BLACK = 0b0000
