@@ -38,7 +38,7 @@ class Square:
         return self.file-1 + (8-self.rank)*8
 
     @staticmethod
-    def all_squares() -> list[Square]:
+    def all_squares():
         files = Square.FILES[1:]
         ranks = range(1, 9)
         squares = []
@@ -57,6 +57,7 @@ class Piece:
             self.engine_piece = piece
             self.fen_piece = engine_piece_to_fen_piece(piece)
         self.color = Game.WHITE if bin(self.engine_piece)[2] else Game.BLACK
+        self.engine_type = int(bin(self.engine_piece)[3:])
 
     @staticmethod
     def fen_piece_to_engine_piece(piece: str) -> int:
@@ -105,10 +106,10 @@ class Board:
         self.array = self.get_array()
         dissected = self.fen.split()
         self.side_to_move = Game.WHITE if dissected[1] == 'w' else Game.BLACK
-        self.castling_capabilities = None if dissected[2] == '-' else dissected[2]
-        self.en_passant_square = None if dissected[3] == '-' else Square(dissected[3])
-        self.hm_since_irreversible = None if dissected[4]== '-' else dissected[4]
-        self.full_moves = None if dissected[5] == '-' else dissected[5]
+        self.castling_capabilities: None | str = None if dissected[2] == '-' else dissected[2]
+        self.en_passant_squares = None if dissected[3] == '-' else Square(dissected[3])
+        self.hm_since_irreversible = None if dissected[4]== '-' else int(dissected[4])
+        self.full_moves = None if dissected[5] == '-' else int(dissected[5])
 
     def get_starting_fen(self) -> str:
         return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -172,7 +173,7 @@ class Board:
             mask.append(False)
         return mask
 
-    def generate_legal_moves(self) -> list[Move]:
+    def generate_legal_moves(self):
         legal_moves = []
         color = self.side_to_move
         mask = self.pieces_mask(color)
@@ -181,15 +182,129 @@ class Board:
                 legal_moves += PieceMoves.generate_moves(self, square)
         # TODO: filter illegal moves, that can be done making the move, and seeing if that leaves the king in check
 
-    def branch_move(self, move: Move) -> Board:
-        # TODO: return a copy of the board with the move made, update fen in the copy accordingly
-        ...
+    def branch_move(self, move):
+        piece_moving = self.get_square(move.start_square)
+        potential_piece_captured = self.get_square(move.end_square)
+        new_board = self.array.copy()
+        new_board[move.start_square.to_1dimentional_index()] = None # lift piece
+
+        promoting = piece_moving.engine_type == Game.PAWN and (move.end_square.rank == 1 or move.end_square.rank == 8)
+        if promoting:
+            new_board[move.end_square.to_1dimensional_index()] = move.promotion # place down promotion piece
+        else:
+            new_board[move.end_square.to_1dimentional_index()] = piece_moving # place down original piece (possible capture)
+        if move.is_en_passant:
+            # obliterate pawn from up/down depending on color
+            new_board[move.end_square.get_offset((0, -1) if piece_moving.color == Game.WHITE else (0, 1))] = None
+        castling = piece_moving.engine_type == Game.KING and abs(move.start_square.file - move.end_square.file) == 2
+        if castling:
+            # if kingside
+            if move.end_square.file == 7:
+                new_board[move.end_square.get_offset((1, 0)).to_1dimensional_index()] = None # lift kingside rook
+                new_board[move.start_square.get_offset((1, 0)).to_1_dimensional_index()] = piece_moving.color | Game.ROOK # place kingside rook
+            else: # move.end_square.file should be 3
+                new_board[move.end_square.get_offset((-2, 0)).to_1dimensional_index()] = None # lift queenside rook
+                new_board[move.start_square.get_offset((-1, 0)).to_1dimensional_index()] = piece_moving.color | Game.ROOK # place queenside rook
+
+        # parse board
+        new_fen = Board.array_to_fen(new_board)
+
+        # toggle color to move
+        new_side_to_move = 'b' if self.side_to_move == Game.WHITE else 'w'
+
+        # castling rights
+        new_castling_rights = self.castling_capabilities
+        if self.castling_capabilities:
+            if piece_moving.engine_type == Game.KING:
+                # king moved, remove both castlings
+                new_castling_rights = new_castling_rights.replace('K' if piece_moving.color == Game.WHITE else 'k', '')
+                new_castling_rights = new_castling_rights.replace('Q' if piece_moving.color == Game.WHITE else 'q', '')
+            else:
+                if 'k' in new_castling_rights:
+                    if move.end_square == Square('h8') or move.start_square == Square('h8'): # king rook square
+                        # king rook captured or moved
+                        new_castling_rights = new_castling_rights.replace('k', '')
+                if 'K' in new_castling_rights:
+                    if move.end_square == Square('h1') or move.start_square == Square('h1'): # king rook square
+                        # king rook captured or moved
+                        new_castling_rights = new_castling_rights.replace('K', '')
+                if 'q' in new_castling_rights:
+                    if move.end_square == Square('a8') or move.start_square == Square('a8'): # queen rook square
+                        # queen rook captured or moved
+                        new_castling_rights = new_castling_rights.replace('q', '')
+                if 'Q' in new_castling_rights:
+                    if move.end_square == Square('a1') or move.start_square == Square('a1'): # queen rook square
+                        # queen rook captured or moved
+                        new_castling_rights = new_castling_rights.replace('Q', '')
+        if new_castling_rights == "": new_castling_rights = "-"
+
+        # en passant squares
+        new_en_passant = '-'
+        left_piece = self.get_square(move.end_square.get_offset((-1, 0)))
+        right_piece = self.get_square(move.end_square.get_offset((1, 0)))
+        is_pawn_double_push = piece_moving.engine_type == Game.PAWN and ((move.start_square.rank == 2 and move.end_square.rank == 4) or (move.start_square.rank == 7 and move.end_square.rank == 5))
+        if is_pawn_double_push:
+            if left_piece:
+                if left_piece.color != piece_moving.color and left_piece.engine_piece == Game.PAWN:
+                    # enemy color pawn
+                    # set en_passant square from color
+                    new_en_passant = move.start_square.get_offset((0, -1)).get() if piece_moving.color == Game.BLACK else move.start_square.get_offset((0, 1)).get()
+            # separate if statements to avoid AttributeError
+            elif right_piece: # elif because either of them work, skips redundant reasignation
+                if right_piece.color != piece_moving.color and right_piece.engine_piece == Game.PAWN:
+                    # enemy color pawn
+                    new_en_passant = move.start_square.get_offset((0, -1)).get() if piece_moving.color == Game.BLACK else move.start_square.get_offset((0, 1)).get()
+
+        # irreversible half-move clock
+        new_hm_since_irreversible = self.hm_since_irreversible + 1
+        # reset if pawn move or capture
+        if self.get_square(move.start_square).engine_piece == Game.PAWN or potential_piece_captured:
+            new_hm_since_irreversible = 0
+
+        # full move counter
+        new_full_moves = self.full_moves
+        # increment on black's move
+        if piece_moving.color == Game.BLACK:
+            new_full_moves += 1
+
+        return Board(" ".join([new_fen, new_side_to_move, new_castling_rights, new_en_passant, str(new_hm_since_irreversible), str(new_full_moves)]))
+
+
+
+    @staticmethod
+    def array_to_fen(array: list["Piece | None"]) -> str:
+        fen = ""
+        for index, piece in enumerate(array):
+            if index != 0 and index % 8 == 0:
+                fen += "/"  # rank separator
+            if piece:
+                fen += piece.fen_piece
+            else:
+                fen += "1"
+
+        # merge consecutive 1s into their count
+        compressed = ""
+        count = 0
+        for char in fen:
+            if char == "1":
+                count += 1
+            else:
+                if count > 0:
+                    compressed += str(count)
+                    count = 0
+                compressed += char
+        if count > 0:  # flush trailing 1s
+            compressed += str(count)
+
+        return compressed
 
 class Move:
-    def __init__(self, start_square: Square, end_square: Square, promotion: Piece | None=None, board: Board=None):
+    def __init__(self, start_square: Square, end_square: Square, promotion: Piece | None=None, is_en_passant: bool = False, board: Board=None):
         self.start_square = start_square
-        self.end_square = end_square
+        self.end_square: Square = end_square
         self.engine_move = start_square.get() + end_square.get()
+        self.promotion = promotion
+        self.is_en_passant = is_en_passant
         if board:
             # Support SAN format too!
             self.piece = board.get_square(start_square)
@@ -252,11 +367,11 @@ class PieceMoves:
                 if not board.get_square(double_forward) and not board.get_square(forward):
                     # Checks both final and intermediate square
                     moves.append(Move(pos, double_forward, board=board))
-            if board.en_passant_square in [left_capture, right_capture]:
-                if board.get_square(board.en_passant_square.get_offset((0,-1) if pawn.color == Game.WHITE else (0, 1))).color == enemy_color:
+            if board.en_passant_squares in [left_capture, right_capture]:
+                if board.get_square(board.en_passant_squares.get_offset((0, -1) if pawn.color == Game.WHITE else (0, 1))).color == enemy_color:
                     # En passant is possible in FEN and that the pawn en_passant references is of the opposite color
                     # (offset because pawn is in the square after the mentioned one in the FEN)
-                    moves.append(Move(pos, board.en_passant_square, board=board))
+                    moves.append(Move(pos, board.en_passant_squares, board=board, is_en_passant=True))
         return moves
 
     @staticmethod
