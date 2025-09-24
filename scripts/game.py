@@ -1,5 +1,5 @@
+from __future__ import annotations
 from operator import countOf
-
 
 class Game:
     WHITE = 0b1000
@@ -15,14 +15,11 @@ class Game:
     def __init__(self):
         self.board = Board()
 
-    def get_board(self):
+    def get_board(self) -> str:
         return self.board.get_starting_fen()
 
-    def get_color_to_play(self):
+    def get_color_to_play(self) -> int:
         return WHITE if self.board.side_to_move == 'w' else BLACK
-
-    def get_piece_legal_moves(self, square):
-        ...
 
 class Square:
     FILES = " abcdefgh" # extra space at the start for making both file and rank start at one
@@ -30,18 +27,21 @@ class Square:
         self.file = Square.FILES.index(pos[0]) # assign file a number instead of letter
         self.rank = int(pos[1])
 
-    def get(self):
-        return str(Square.FILES[self.file]+self.rank)
+    def get(self) -> str:
+        return str(Square.FILES[self.file])+str(self.rank)
 
-    def get_offset(self, offset: tuple[int, int]):
+    def get_offset(self, offset: tuple[int, int]) -> Square:
         if not (1 <= self.file+offset[0] <= 8 and 1 <= self.rank+offset[1] <= 8): return None # outside bounds
         return Square(Square.FILES[self.file+offset[0]]+(self.rank+offset[1]))
 
-    def to_1dimensional_index(self):
+    def to_1dimensional_index(self) -> int:
         return self.file-1 + (8-self.rank)*8
 
+    def get_file(self) -> str:
+        return str(Square.FILES[self.file])
+
     @staticmethod
-    def all_squares():
+    def all_squares() -> list[Square]:
         files = Square.FILES[1:]
         ranks = range(1, 9)
         squares = []
@@ -180,7 +180,7 @@ class Board:
             mask.append(False)
         return mask
 
-    def generate_legal_moves(self):
+    def generate_legal_moves(self) -> list[Move]:
         pseudo_legal_moves = []
         legal_moves = []
         color = self.side_to_move
@@ -203,7 +203,7 @@ class Board:
                 legal_moves.append(move)
         return legal_moves
 
-    def branch_move(self, move):
+    def branch_move(self, move) -> Board:
         piece_moving = self.get_square(move.start_square)
         potential_piece_captured = self.get_square(move.end_square)
         new_board = self.array.copy()
@@ -288,7 +288,8 @@ class Board:
         if piece_moving.color == Game.BLACK:
             new_full_moves += 1
 
-        return Board(" ".join([new_fen, new_side_to_move, new_castling_rights, new_en_passant, str(new_hm_since_irreversible), str(new_full_moves)]))
+        return Board(" ".join(
+            [new_fen, new_side_to_move, new_castling_rights, new_en_passant, str(new_hm_since_irreversible), str(new_full_moves)]))
 
 
 
@@ -332,24 +333,48 @@ class Move:
             # Support SAN format too!
             self.piece = board.get_square(start_square)
             self.is_capture = board.get_square(end_square) is not None
-            self.san = ""
-            PieceMoves.disambiguate_for(self)
+            self.generate_san()
+
+    def generate_san(self) -> None:
+        if self.piece.engine_piece == Game.PAWN:
+            if self.start_square.file == self.end_square.file:
+                # normal movement (e4)
+                self.san = self.end_square.get()
+            else:
+                # capture (exd5)
+                self.san = self.start_square.get_file() + "x" + self.end_square.get()
+        else:
+            # setting first letter of the san to be the piece
+            self.san = self.piece.fen_piece.upper()
+            # add disambiguation after piece type
+            self.san += PieceMoves.disambiguate_for(self)
+            # if capture indicate so
+            if self.is_capture: self.san += 'x'
+            # finally, end square
+            self.san += self.end_square.get()
 
 
 class PieceMoves:
     @staticmethod
-    def disambiguate_for(move: Move):
-        board = move.current_board
-        for legal_move in board.generate_legal_moves():
-            if legal_move.end_square == move.end_square and legal_move.start_square != move.start_square and legal_move.piece == move.piece:
-                # must disambiguate
-                if countOf(board.get_file(move.start_square.file), move.piece) == 1:
-                    # simple file disambiguation
-                    piece = move.piece.fen_piece.upper()
-                    file = move.start_square.get()[0]
-                    move.san = piece if piece != 'P' else ' ' + file + move.end_square.get()
-                    return
-                # TODO: must finish rank disambiguation and double disambiguation
+    def disambiguate_for(move: Move) -> str:
+        colliding_moves = []
+        for m in move.current_board.generate_legal_moves():
+            if m.end_square == move.end_square and m.piece == move.piece and m.start_square != move.start_square:
+                # uh-oh, must disambiguate, both moves would come to the same san
+                colliding_moves.append(m)
+        if len(colliding_moves) == 0: return ''# early return
+
+        rank_collision = any(m.start_square.rank == move.start_square.rank for m in colliding_moves)
+        file_collision = any(m.start_square.file == move.start_square.file for m in colliding_moves)
+
+        if rank_collision and file_collision:
+            # double disambiguation
+            return move.start_square.get()
+        elif file_collision:
+            # rank disambiguation
+            return str(move.start_square.rank)
+        # if only ranks collide or not rank nor file collide, use file
+        return move.start_square.get_file()
 
     # TODO: write perft function (https://www.chessprogramming.org/Perft)
 
