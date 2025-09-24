@@ -1,3 +1,6 @@
+from operator import countOf
+
+
 class Game:
     WHITE = 0b1000
     BLACK = 0b0000
@@ -91,7 +94,7 @@ class Piece:
         piece = bin(piece)[2:]
         piece_color = Game.WHITE if piece[0] else Game.BLACK
         pieces = 'pnbrqk'
-        piece_index = int(piece[1:], 2)
+        piece_index = int(piece[1:], 2) # cutoff piece engine color
         piece_type = pieces[piece_index]
         if piece_color == Game.WHITE:
             return piece_type.upper()
@@ -130,9 +133,12 @@ class Board:
     def get_square(self, square: Square) ->  Piece | None:
         return self.array[square.to_1dimensional_index()]
 
-    def get_file(self, file: str) -> list[Piece | None]:
-        files = 'abcdefgh'
-        file = files.index(file)
+    def get_file(self, file: str | int) -> list[Piece | None]:
+        if type(file) is str:
+            files = 'abcdefgh'
+            file = files.index(file)
+        else:
+            file = file-1
         array_indices = [n*8+file for n in range(8)]
         array_values = [self.array[i] for i in array_indices]
         return array_values
@@ -153,7 +159,8 @@ class Board:
                     # target square has a piece of the correct color to check
                     for move in PieceMoves.generate_moves(self, current_square, True):
                         # for each possible move with that piece, if that move target end square matches, color controls square
-                        if move.end_square == square: return True
+                        # skipping pawn advances, as they do not control those squares
+                        if move.end_square == square and not move.is_not_controlling: return True
         return False
 
     def instances_of_piece(self, piece: Piece) -> list[Square]:
@@ -174,13 +181,27 @@ class Board:
         return mask
 
     def generate_legal_moves(self):
+        pseudo_legal_moves = []
         legal_moves = []
         color = self.side_to_move
         mask = self.pieces_mask(color)
         for square in Square.all_squares():
-            if mask[square.to_1dimensional_index()]:
-                legal_moves += PieceMoves.generate_moves(self, square)
-        # TODO: filter illegal moves, that can be done making the move, and seeing if that leaves the king in check
+            if mask[square.to_1dimensional_index()]: # little optimization to only look at squares with own pieces
+                pseudo_legal_moves += PieceMoves.generate_moves(self, square)
+
+        for move in pseudo_legal_moves:
+            new_board = self.branch_move(move)
+
+            #check king square after moving, in case of a king move
+            own_king = new_board.instances_of_piece(Piece(Game.KING | color))
+            # error checking
+            if len(own_king) != 1:
+                raise Exception(f"Invalid position, more or less than one {"white" if color == Game.WHITE else "black"} king.")
+
+            king_square = own_king[0]
+            if not new_board.is_square_being_attacked_by_color(king_square, Game.WHITE-color): # color inverse
+                legal_moves.append(move)
+        return legal_moves
 
     def branch_move(self, move):
         piece_moving = self.get_square(move.start_square)
@@ -299,25 +320,36 @@ class Board:
         return compressed
 
 class Move:
-    def __init__(self, start_square: Square, end_square: Square, promotion: Piece | None=None, is_en_passant: bool = False, board: Board=None):
+    def __init__(self, start_square: Square, end_square: Square, promotion: Piece | None=None, is_en_passant: bool = False, is_not_controlling: bool = False, board: Board=None):
         self.start_square = start_square
         self.end_square: Square = end_square
         self.engine_move = start_square.get() + end_square.get()
         self.promotion = promotion
         self.is_en_passant = is_en_passant
+        self.is_not_controlling = is_not_controlling # pawn moves
         if board:
+            self.current_board = board
             # Support SAN format too!
             self.piece = board.get_square(start_square)
             self.is_capture = board.get_square(end_square) is not None
-            board_file = board.get_file(start_square.file)
+            self.san = ""
             PieceMoves.disambiguate_for(self)
 
 
 class PieceMoves:
     @staticmethod
     def disambiguate_for(move: Move):
-        # TODO: complete legal move generation
-        ...
+        board = move.current_board
+        for legal_move in board.generate_legal_moves():
+            if legal_move.end_square == move.end_square and legal_move.start_square != move.start_square and legal_move.piece == move.piece:
+                # must disambiguate
+                if countOf(board.get_file(move.start_square.file), move.piece) == 1:
+                    # simple file disambiguation
+                    piece = move.piece.fen_piece.upper()
+                    file = move.start_square.get()[0]
+                    move.san = piece if piece != 'P' else ' ' + file + move.end_square.get()
+                    return
+                # TODO: must finish rank disambiguation and double disambiguation
 
     # TODO: write perft function (https://www.chessprogramming.org/Perft)
 
@@ -338,23 +370,23 @@ class PieceMoves:
         if promoting:
             if not board.get_square(forward):
                 for piece in promotable:
-                    moves.append(Move(pos, forward, Piece(piece), board))
+                    moves.append(Move(pos, forward, Piece(piece), board=board, is_not_controlling=True))
             if pos.file != 1:
                 # Not in A file, check diagonal left capture
                 if board.get_square(left_capture) and board.get_square(left_capture).color == enemy_color:
                     for piece in promotable:
-                        moves.append(Move(pos, left_capture, Piece(piece), board))
+                        moves.append(Move(pos, left_capture, Piece(piece), board=board))
             if pos.file != 8:
                 # Not in H file, check diagonal right capture
                 if board.get_square(right_capture) and board.get_square(right_capture).color == enemy_color:
                     for piece in promotable:
-                        moves.append(Move(pos, right_capture, Piece(piece), board))
+                        moves.append(Move(pos, right_capture, Piece(piece), board=board))
         # Double move and en passant skipped when promoting,
         # such situations are imposible to happen in any chess position
         else:
             if not board.get_square(forward):
                 # Ahead clear
-                moves.append(Move(pos, forward, board=board))
+                moves.append(Move(pos, forward, board=board, is_not_controlling=True))
             if pos.file != 1:
                 # Not in A file, check diagonal left capture
                 if board.get_square(left_capture) and board.get_square(left_capture).color == enemy_color:
@@ -366,7 +398,7 @@ class PieceMoves:
             if (pos.rank == 2 and pawn.color == Game.WHITE) or (pos.rank == 7 and pawn.color == Game.BLACK):
                 if not board.get_square(double_forward) and not board.get_square(forward):
                     # Checks both final and intermediate square
-                    moves.append(Move(pos, double_forward, board=board))
+                    moves.append(Move(pos, double_forward, board=board, is_not_controlling=True))
             if board.en_passant_squares in [left_capture, right_capture]:
                 if board.get_square(board.en_passant_squares.get_offset((0, -1) if pawn.color == Game.WHITE else (0, 1))).color == enemy_color:
                     # En passant is possible in FEN and that the pawn en_passant references is of the opposite color
@@ -487,7 +519,14 @@ class PieceMoves:
             case Game.QUEEN:
                 return PieceMoves.queen(board, pos)
             case Game.KING:
-                # ignore castling to avoid infinite recursion, castling irrelevant for controlling squares
+                """
+                ignore castling to avoid infinite recursion, castling irrelevant for controlling squares
+                :: when utilizing this function to see which squares the enemy is controlling, if castling was included, then we would need
+                to check which squares the enemy of the enemy (ally) color is controlling, and if we include castling in that calculation, 
+                we would need to check enemy controlling squares and so on, so, for checking square control, we need to ignore castlings, and that
+                is possible without consequences, because a castling move is not counted as controlling that square (which will always be covered
+                by the tower anyway)
+                """
                 return PieceMoves.king(board, pos, ignore_castling)
             case _:
                 return []
