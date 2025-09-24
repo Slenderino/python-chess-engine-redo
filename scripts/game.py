@@ -457,7 +457,7 @@ class PieceMoves:
     @staticmethod
     def knight(board: Board, pos: Square) -> list[Move]:
         # hardcoded knight offsets
-        offsets = [(1, 2), (2, 1), (2, -1), (1, -2), (-1, -2), (-2, -1), (-2, 1), (-1, 2)]
+        offsets = [(-1, 2), (1, 2), (-2, 1), (2, 1), (-2, -1), (2, -1), (-1, -2), (1, -2)]
         return PieceMoves.non_sliding_piece(board, pos, offsets)
 
     @staticmethod
@@ -484,25 +484,22 @@ class PieceMoves:
 
     @staticmethod
     def bishop(board: Board, pos: Square) -> list[Move]:
-        directions = [(1, 1), (1, -1), (-1, -1), (-1, 1)]
+        directions = [(-1, 1), (1, 1), (-1, -1), (-1, 1)]
         return PieceMoves.sliding_piece(board, pos, directions)
 
     @staticmethod
     def rook(board: Board, pos: Square) -> list[Move]:
-        directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+        directions = [(0, 1), (-1, 0), (1, 0), (0, -1)]
         return PieceMoves.sliding_piece(board, pos, directions)
 
     @staticmethod
     def queen(board: Board, pos: Square) -> list[Move]:
-        directions = [
-            (0, 1), (1, 0), (0, -1), (-1, 0),  # rook-like
-            (1, 1), (1, -1), (-1, -1), (-1, 1)  # bishop-like
-            ]
+        directions = [(-1, 1), (0, 1), (1, 1), (-1, 0), (1, 0), (-1, -1), (0, -1), (1, -1)]
         return PieceMoves.sliding_piece(board, pos, directions)
 
     @staticmethod
     def king(board: Board, pos: Square, ignore_castling: bool=False) -> list[Move]:
-        offsets = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (1, -1), (-1, -1), (-1, 1)] # same as queen
+        offsets = [(-1, 1), (0, 1), (1, 1), (-1, 0), (1, 0), (-1, -1), (0, -1), (1, -1)] # same as queen
         base_moves = PieceMoves.non_sliding_piece(board, pos, offsets)
         if ignore_castling: return base_moves
         castling_moves = []
@@ -560,6 +557,3 @@ class PieceMoves:
                 return PieceMoves.king(board, pos, ignore_castling)
             case _:
                 return []
-
-# g = Board()
-# print([m.generate_san() for m in g.generate_legal_moves()])
