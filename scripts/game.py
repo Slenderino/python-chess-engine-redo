@@ -32,7 +32,7 @@ class Square:
 
     def get_offset(self, offset: tuple[int, int]) -> Square:
         if not (1 <= self.file+offset[0] <= 8 and 1 <= self.rank+offset[1] <= 8): return None # outside bounds
-        return Square(Square.FILES[self.file+offset[0]]+(self.rank+offset[1]))
+        return Square(Square.FILES[self.file+offset[0]]+str(self.rank+offset[1]))
 
     def to_1dimensional_index(self) -> int:
         return self.file-1 + (8-self.rank)*8
@@ -42,11 +42,13 @@ class Square:
 
     @staticmethod
     def all_squares() -> list[Square]:
+        # in order to compy with the rest of the ordering in the engine,
+        # we must start at a8 and finisgh in h1
         files = Square.FILES[1:]
-        ranks = range(1, 9)
+        ranks = range(1, 9)[::-1]
         squares = []
-        for file in files:
-            for rank in ranks:
+        for rank in ranks:
+            for file in files:
                 squares.append(Square(file+str(rank)))
         return squares
 
@@ -55,12 +57,12 @@ class Piece:
     def __init__(self, piece: str | int):
         if type(piece) is str:
             self.fen_piece = piece
-            self.engine_piece = fen_piece_to_engine_piece(piece)
+            self.engine_piece = self.fen_piece_to_engine_piece(piece)
         else:
             self.engine_piece = piece
-            self.fen_piece = engine_piece_to_fen_piece(piece)
-        self.color = Game.WHITE if bin(self.engine_piece)[2] else Game.BLACK
-        self.engine_type = int(bin(self.engine_piece)[3:])
+            self.fen_piece = self.engine_piece_to_fen_piece(piece)
+        self.color = Game.WHITE if format(self.engine_piece, '04b')[0] == '1' else Game.BLACK
+        self.engine_type = int(format(self.engine_piece, '04b')[1:], 2)
 
     @staticmethod
     def fen_piece_to_engine_piece(piece: str) -> int:
@@ -166,8 +168,9 @@ class Board:
     def instances_of_piece(self, piece: Piece) -> list[Square]:
         instances = []
         for square in Square.all_squares():
-            if self.get_square(square) == piece:
-                instances.append(square)
+            if self.get_square(square):
+                if self.get_square(square).fen_piece == piece.fen_piece:
+                    instances.append(square)
         return instances
 
     def pieces_mask(self, color: int) -> list[bool]:
@@ -196,7 +199,8 @@ class Board:
             own_king = new_board.instances_of_piece(Piece(Game.KING | color))
             # error checking
             if len(own_king) != 1:
-                raise Exception(f"Invalid position, more or less than one {"white" if color == Game.WHITE else "black"} king.")
+                raise Exception(f"Invalid position, more or less than one {"white" if color == Game.WHITE else "black"} king.\nFEN:\n{new_board.fen}"+
+                                f"\n{Piece(Game.KING | color)}")
 
             king_square = own_king[0]
             if not new_board.is_square_being_attacked_by_color(king_square, Game.WHITE-color): # color inverse
@@ -207,13 +211,13 @@ class Board:
         piece_moving = self.get_square(move.start_square)
         potential_piece_captured = self.get_square(move.end_square)
         new_board = self.array.copy()
-        new_board[move.start_square.to_1dimentional_index()] = None # lift piece
+        new_board[move.start_square.to_1dimensional_index()] = None # lift piece
 
         promoting = piece_moving.engine_type == Game.PAWN and (move.end_square.rank == 1 or move.end_square.rank == 8)
         if promoting:
             new_board[move.end_square.to_1dimensional_index()] = move.promotion # place down promotion piece
         else:
-            new_board[move.end_square.to_1dimentional_index()] = piece_moving # place down original piece (possible capture)
+            new_board[move.end_square.to_1dimensional_index()] = piece_moving # place down original piece (possible capture)
         if move.is_en_passant:
             # obliterate pawn from up/down depending on color
             new_board[move.end_square.get_offset((0, -1) if piece_moving.color == Game.WHITE else (0, 1))] = None
@@ -222,7 +226,7 @@ class Board:
             # if kingside
             if move.end_square.file == 7:
                 new_board[move.end_square.get_offset((1, 0)).to_1dimensional_index()] = None # lift kingside rook
-                new_board[move.start_square.get_offset((1, 0)).to_1_dimensional_index()] = piece_moving.color | Game.ROOK # place kingside rook
+                new_board[move.start_square.get_offset((1, 0)).to_1dimensional_index()] = piece_moving.color | Game.ROOK # place kingside rook
             else: # move.end_square.file should be 3
                 new_board[move.end_square.get_offset((-2, 0)).to_1dimensional_index()] = None # lift queenside rook
                 new_board[move.start_square.get_offset((-1, 0)).to_1dimensional_index()] = piece_moving.color | Game.ROOK # place queenside rook
@@ -261,8 +265,10 @@ class Board:
 
         # en passant squares
         new_en_passant = '-'
-        left_piece = self.get_square(move.end_square.get_offset((-1, 0)))
-        right_piece = self.get_square(move.end_square.get_offset((1, 0)))
+        left_square = move.end_square.get_offset((-1, 0))
+        right_square = move.start_square.get_offset((1, 0))
+        left_piece = self.get_square(left_square) if left_square else None
+        right_piece = self.get_square(right_square) if right_square else None
         is_pawn_double_push = piece_moving.engine_type == Game.PAWN and ((move.start_square.rank == 2 and move.end_square.rank == 4) or (move.start_square.rank == 7 and move.end_square.rank == 5))
         if is_pawn_double_push:
             if left_piece:
@@ -330,13 +336,11 @@ class Move:
         self.is_not_controlling = is_not_controlling # pawn moves
         if board:
             self.current_board = board
-            # Support SAN format too!
             self.piece = board.get_square(start_square)
             self.is_capture = board.get_square(end_square) is not None
-            self.generate_san()
 
-    def generate_san(self) -> None:
-        if self.piece.engine_piece == Game.PAWN:
+    def generate_san(self) -> str:
+        if self.piece.engine_type == Game.PAWN:
             if self.start_square.file == self.end_square.file:
                 # normal movement (e4)
                 self.san = self.end_square.get()
@@ -352,6 +356,7 @@ class Move:
             if self.is_capture: self.san += 'x'
             # finally, end square
             self.san += self.end_square.get()
+        return self.san
 
 
 class PieceMoves:
@@ -391,7 +396,7 @@ class PieceMoves:
         right_capture = pos.get_offset((1, 1)) if pawn.color == Game.WHITE else pos.get_offset((1, -1))
         double_forward = pos.get_offset((0, 2)) if pawn.color == Game.WHITE else pos.get_offset((0, -2))
         promoting = forward.rank in [1, 8]
-        promotable = [Game.KNIGHT, Game.BISHOP, Game.ROOK, Game.QUEEN,]
+        promotable = [Game.KNIGHT, Game.BISHOP, Game.ROOK, Game.QUEEN]
         if promoting:
             if not board.get_square(forward):
                 for piece in promotable:
@@ -424,7 +429,7 @@ class PieceMoves:
                 if not board.get_square(double_forward) and not board.get_square(forward):
                     # Checks both final and intermediate square
                     moves.append(Move(pos, double_forward, board=board, is_not_controlling=True))
-            if board.en_passant_squares in [left_capture, right_capture]:
+            if board.en_passant_squares in [left_capture, right_capture] and board.en_passant_squares:
                 if board.get_square(board.en_passant_squares.get_offset((0, -1) if pawn.color == Game.WHITE else (0, 1))).color == enemy_color:
                     # En passant is possible in FEN and that the pawn en_passant references is of the opposite color
                     # (offset because pawn is in the square after the mentioned one in the FEN)
@@ -531,7 +536,7 @@ class PieceMoves:
 
     @staticmethod
     def generate_moves(board: Board, pos: Square, ignore_castling: bool=False) -> list[Move]:
-        piece_type = board.get_square(pos).engine_piece
+        piece_type = board.get_square(pos).engine_type
         match piece_type:
             case Game.PAWN:
                 return PieceMoves.pawn(board, pos)
@@ -555,3 +560,6 @@ class PieceMoves:
                 return PieceMoves.king(board, pos, ignore_castling)
             case _:
                 return []
+
+# g = Board()
+# print([m.generate_san() for m in g.generate_legal_moves()])
