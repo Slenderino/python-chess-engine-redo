@@ -151,8 +151,6 @@ class Board:
         return self.array[rank*8:rank*8+8]
 
     def is_square_being_attacked_by_color(self, square: Square, color: int) -> bool:
-        files = "abcdefgh"
-        ranks = range(1, 9)
         # loop all squares
         squares = Square.all_squares()
         for current_square in squares:
