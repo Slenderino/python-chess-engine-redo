@@ -499,7 +499,7 @@ class PieceMoves:
 
     @staticmethod
     def bishop(board: Board, pos: Square) -> list[Move]:
-        directions = [(-1, 1), (1, 1), (-1, -1), (-1, 1)]
+        directions = [(-1, 1), (1, 1), (-1, -1), (1, -1)]
         return PieceMoves.sliding_piece(board, pos, directions)
 
     @staticmethod
