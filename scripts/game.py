@@ -285,7 +285,7 @@ class Board:
         # irreversible half-move clock
         new_hm_since_irreversible = self.hm_since_irreversible + 1
         # reset if pawn move or capture
-        if self.get_square(move.start_square).engine_piece == Game.PAWN or potential_piece_captured:
+        if self.get_square(move.start_square).engine_type == Game.PAWN or potential_piece_captured:
             new_hm_since_irreversible = 0
 
         # full move counter
