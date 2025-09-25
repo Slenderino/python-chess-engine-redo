@@ -1,5 +1,6 @@
 from __future__ import annotations
 from operator import countOf
+import time
 
 class Game:
     WHITE = 0b1000
@@ -111,7 +112,7 @@ class Board:
         self.array = self.get_array()
         dissected = self.fen.split()
         self.side_to_move = Game.WHITE if dissected[1] == 'w' else Game.BLACK
-        self.castling_capabilities: None | str = None if dissected[2] == '-' else dissected[2]
+        self.castling_capabilities = dissected[2]
         self.en_passant_squares = None if dissected[3] == '-' else Square(dissected[3])
         self.hm_since_irreversible = None if dissected[4]== '-' else int(dissected[4])
         self.full_moves = None if dissected[5] == '-' else int(dissected[5])
@@ -260,7 +261,7 @@ class Board:
                     if move.end_square == Square('a1') or move.start_square == Square('a1'): # queen rook square
                         # queen rook captured or moved
                         new_castling_rights = new_castling_rights.replace('Q', '')
-        if new_castling_rights == "": new_castling_rights = "-"
+        if new_castling_rights == "" or new_castling_rights == None: new_castling_rights = "-"
 
         # en passant squares
         new_en_passant = '-'
@@ -380,7 +381,24 @@ class PieceMoves:
         # if only ranks collide or not rank nor file collide, use file
         return move.start_square.get_file()
 
-    # TODO: write perft function (https://www.chessprogramming.org/Perft)
+    @staticmethod
+    def perft(position: Board, depth: int, recursive=False):
+        if depth == 0:
+            return 1  # a leaf node counts as 1
+
+        legal_moves = position.generate_legal_moves()
+        count = 0
+        for m in legal_moves:
+            new_pos = position.branch_move(m)
+            subcount = PieceMoves.perft(new_pos, depth - 1, recursive=True)
+            count += subcount
+            if not recursive:
+                # divided perft
+                print(f'{m.engine_move}: {subcount}')
+
+        if not recursive:
+            print(f'Total: {count}')
+        return count
 
     @staticmethod
     def pawn(board: Board, pos: Square) -> list[Move]:
@@ -504,29 +522,30 @@ class PieceMoves:
         castling_moves = []
         color = board.get_square(pos).color
         enemy_color = abs(Game.WHITE-color)
-        # king-side castling
-        if board.get_square(pos).fen_piece in board.castling_capabilities:
-            # check clear path
-            if (not board.get_square(pos.get_offset((1, 0)))) and (not board.get_square(pos.get_offset((2, 0)))):
-                # bishop space and knight space unnocupied
-                if ((not board.is_square_being_attacked_by_color(pos, enemy_color)) # king in peace
-                and (not board.is_square_being_attacked_by_color(pos.get_offset((1, 0)), enemy_color)) # bishop space in peace
-                and (not board.is_square_being_attacked_by_color(pos.get_offset((2, 0)), enemy_color))): # knight space in peace
-                    castling_moves.append(Move(pos, pos.get_offset((2, 0)), board=board))
-        # queen-side castling
-        fen = 'q' if color == Game.BLACK else 'Q'
-        if fen in board.castling_capabilities:
-            # check clear path
-            if ((not board.get_square(pos.get_offset((-1, 0)))) # no queen
-            and (not board.get_square(pos.get_offset((-2, 0)))) # no bishop
-            and (not board.get_square(pos.get_offset((-3, 0))))): # no knight
-                # space clear
-                # check for squares not being attacked
-                if ((not board.is_square_being_attacked_by_color(pos, enemy_color)) # king in peace
-                and (not board.is_square_being_attacked_by_color(pos.get_offset((-1, 0)), enemy_color)) # queen space in peace
-                and (not board.is_square_being_attacked_by_color(pos.get_offset((-2, 0))), enemy_color)):  # bishop space in peace
-                    # no knight needed, king does not traverse there
-                    castling_moves.append(Move(pos, pos.get_offset((-2, 0)), board=board))
+        if board.castling_capabilities:
+            # king-side castling
+            if board.get_square(pos).fen_piece in board.castling_capabilities:
+                # check clear path
+                if (not board.get_square(pos.get_offset((1, 0)))) and (not board.get_square(pos.get_offset((2, 0)))):
+                    # bishop space and knight space unnocupied
+                    if ((not board.is_square_being_attacked_by_color(pos, enemy_color)) # king in peace
+                    and (not board.is_square_being_attacked_by_color(pos.get_offset((1, 0)), enemy_color)) # bishop space in peace
+                    and (not board.is_square_being_attacked_by_color(pos.get_offset((2, 0)), enemy_color))): # knight space in peace
+                        castling_moves.append(Move(pos, pos.get_offset((2, 0)), board=board))
+            # queen-side castling
+            fen = 'q' if color == Game.BLACK else 'Q'
+            if fen in board.castling_capabilities:
+                # check clear path
+                if ((not board.get_square(pos.get_offset((-1, 0)))) # no queen
+                and (not board.get_square(pos.get_offset((-2, 0)))) # no bishop
+                and (not board.get_square(pos.get_offset((-3, 0))))): # no knight
+                    # space clear
+                    # check for squares not being attacked
+                    if ((not board.is_square_being_attacked_by_color(pos, enemy_color)) # king in peace
+                    and (not board.is_square_being_attacked_by_color(pos.get_offset((-1, 0)), enemy_color)) # queen space in peace
+                    and (not board.is_square_being_attacked_by_color(pos.get_offset((-2, 0))), enemy_color)):  # bishop space in peace
+                        # no knight needed, king does not traverse there
+                        castling_moves.append(Move(pos, pos.get_offset((-2, 0)), board=board))
 
         return base_moves + castling_moves
 
@@ -556,3 +575,8 @@ class PieceMoves:
                 return PieceMoves.king(board, pos, ignore_castling)
             case _:
                 return []
+
+b = Board()
+t = time.perf_counter()
+PieceMoves.perft(b, 3)
+print(time.perf_counter() - t)
