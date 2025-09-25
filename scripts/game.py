@@ -199,8 +199,7 @@ class Board:
             own_king = new_board.instances_of_piece(Piece(Game.KING | color))
             # error checking
             if len(own_king) != 1:
-                raise Exception(f"Invalid position, more or less than one {"white" if color == Game.WHITE else "black"} king.\nFEN:\n{new_board.fen}"+
-                                f"\n{Piece(Game.KING | color)}")
+                raise Exception(f"Invalid position, {len(own_king)} {"white" if color == Game.WHITE else "black"} king's.\nFEN:\n{new_board.fen}")
 
             king_square = own_king[0]
             if not new_board.is_square_being_attacked_by_color(king_square, Game.WHITE-color): # color inverse
