@@ -93,8 +93,8 @@ class Piece:
     @staticmethod
     def engine_piece_to_fen_piece(piece: int) -> str:
         if piece == " ": return None
-        piece = bin(piece)[2:]
-        piece_color = Game.WHITE if piece[0] else Game.BLACK
+        piece = format(piece, '04b')
+        piece_color = Game.WHITE if piece[0] == '1' else Game.BLACK
         pieces = 'pnbrqk'
         piece_index = int(piece[1:], 2) # cutoff piece engine color
         piece_type = pieces[piece_index]
