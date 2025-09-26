@@ -24,37 +24,64 @@ class Game:
 
 class Square:
     FILES = " abcdefgh" # extra space at the start for making both file and rank start at one
+
+    _ALL_SQUARES_LIST = None
+    _ALL_SQUARES_DICT = None
+
     def __init__(self, pos: str):
         self.file = Square.FILES.index(pos[0]) # assign file a number instead of letter
         self.rank = int(pos[1])
+        self._name = pos
+        # cache index and file char
+        self._index = self.file-1 + (8-self.rank)*8
+        self._file_char = Square.FILES[self.file]
 
     def get(self) -> str:
-        return str(Square.FILES[self.file])+str(self.rank)
+        return self._name
 
     def get_offset(self, offset: tuple[int, int]) -> Square:
         if not (1 <= self.file+offset[0] <= 8 and 1 <= self.rank+offset[1] <= 8): return None # outside bounds
-        return Square(Square.FILES[self.file+offset[0]]+str(self.rank+offset[1]))
+        return self.from_name(Square.FILES[self.file+offset[0]]+str(self.rank+offset[1]))
 
     def to_1dimensional_index(self) -> int:
-        return self.file-1 + (8-self.rank)*8
+        return self._index
 
     def get_file(self) -> str:
-        return str(Square.FILES[self.file])
+        return self._file_char
 
     @staticmethod
     def all_squares() -> list[Square]:
-        # in order to compy with the rest of the ordering in the engine,
-        # we must start at a8 and finisgh in h1
-        files = Square.FILES[1:]
-        ranks = range(1, 9)[::-1]
-        squares = []
-        for rank in ranks:
-            for file in files:
-                squares.append(Square(file+str(rank)))
-        return squares
+        if Square._ALL_SQUARES_LIST is None:
+            Square._ALL_SQUARES_LIST = []
+            Square._ALL_SQUARES_DICT = {}
+            # in order to compy with the rest of the ordering in the engine,
+            # we must start at a8 and finisgh in h1
+            files = "abcdefgh"
+            ranks = list(range(8,0,-1))
+            squares = []
+            for r in ranks:
+                for f in files:
+                    s = Square(f + str(r))
+                    Square._ALL_SQUARES_LIST.append(s)
+                    Square._ALL_SQUARES_DICT[f + str(r)] = s
+        return Square._ALL_SQUARES_LIST
+
+    @staticmethod
+    def from_name(name: str) -> "Square":
+        if Square._ALL_SQUARES_DICT is None:
+            Square.all_squares()
+        return Square._ALL_SQUARES_DICT[name]
 
 
 class Piece:
+    # Precompute once
+    _FEN_TO_ENGINE = {'p': Game.BLACK | Game.PAWN, 'n': Game.BLACK | Game.KNIGHT, 'b': Game.BLACK | Game.BISHOP,
+        'r': Game.BLACK | Game.ROOK, 'q': Game.BLACK | Game.QUEEN, 'k': Game.BLACK | Game.KING,
+        'P': Game.WHITE | Game.PAWN, 'N': Game.WHITE | Game.KNIGHT, 'B': Game.WHITE | Game.BISHOP,
+        'R': Game.WHITE | Game.ROOK, 'Q': Game.WHITE | Game.QUEEN, 'K': Game.WHITE | Game.KING, }
+
+    _ENGINE_TO_FEN = {v: k for k, v in _FEN_TO_ENGINE.items()}
+
     def __init__(self, piece: str | int):
         if type(piece) is str:
             self.fen_piece = piece
@@ -68,40 +95,12 @@ class Piece:
     @staticmethod
     def fen_piece_to_engine_piece(piece: str) -> int:
         if piece == " ": return None
-        if piece.islower():
-            # piece is black
-            p_color = Game.BLACK
-        else:
-            p_color = Game.WHITE
-        match piece.lower():
-            case 'p':
-                p_type = Game.PAWN
-            case 'n':
-                p_type = Game.KNIGHT
-            case 'b':
-                p_type = Game.BISHOP
-            case 'r':
-                p_type = Game.ROOK
-            case 'q':
-                p_type = Game.QUEEN
-            case 'k':
-                p_type = Game.KING
-            case _:
-                raise Exception("Invalid piece")
-
-        return p_color | p_type
+        return Piece._FEN_TO_ENGINE[piece]
 
     @staticmethod
     def engine_piece_to_fen_piece(piece: int) -> str:
         if piece == " ": return None
-        piece = format(piece, '04b')
-        piece_color = Game.WHITE if piece[0] == '1' else Game.BLACK
-        pieces = 'pnbrqk'
-        piece_index = int(piece[1:], 2) # cutoff piece engine color
-        piece_type = pieces[piece_index]
-        if piece_color == Game.WHITE:
-            return piece_type.upper()
-        return piece_type
+        return Piece._ENGINE_TO_FEN[piece]
 
 class Board:
     def __init__(self, fen=None):
@@ -161,7 +160,7 @@ class Board:
                     for move in PieceMoves.generate_moves(self, current_square, True):
                         # for each possible move with that piece, if that move target end square matches, color controls square
                         # skipping pawn advances, as they do not control those squares
-                        if move.end_square == square and not move.is_not_controlling: return True
+                        if move.end_square.get() == square.get() and not move.is_not_controlling: return True
         return False
 
     def instances_of_piece(self, piece: Piece) -> list[Square]:
@@ -205,8 +204,10 @@ class Board:
                 legal_moves.append(move)
         return legal_moves
 
-    def branch_move(self, move) -> Board:
+    def branch_move(self, move: Move | str) -> Board:
+        if type(move) is str: move = Move(Square(move[0]+move[1]), Square(move[2]+move[3]), board=self)
         piece_moving = self.get_square(move.start_square)
+        if not piece_moving: raise Exception(f"Invalid starting position, {move.start_square.get()} in position:\n{self.fen}")
         potential_piece_captured = self.get_square(move.end_square)
         new_board = self.array.copy()
         new_board[move.start_square.to_1dimensional_index()] = None # lift piece
@@ -330,8 +331,8 @@ class Move:
     def __init__(self, start_square: Square, end_square: Square, promotion: Piece | None=None, is_en_passant: bool = False, is_not_controlling: bool = False, board: Board=None):
         self.start_square = start_square
         self.end_square: Square = end_square
-        self.engine_move = start_square.get() + end_square.get()
         self.promotion = promotion
+        self.engine_move = start_square.get() + end_square.get() + (promotion.fen_piece.lower() if promotion else '')
         self.is_en_passant = is_en_passant
         self.is_not_controlling = is_not_controlling # pawn moves
         if board:
@@ -385,6 +386,8 @@ class PieceMoves:
     def perft(position: Board, depth: int, recursive=False):
         if depth == 0:
             return 1  # a leaf node counts as 1
+        if not recursive:
+            divisions = {}
 
         legal_moves = position.generate_legal_moves()
         count = 0
@@ -394,10 +397,13 @@ class PieceMoves:
             count += subcount
             if not recursive:
                 # divided perft
-                print(f'{m.engine_move}: {subcount}')
+                # print(f'{m.engine_move}: {subcount}')
+                divisions[m.engine_move] = subcount
 
         if not recursive:
-            print(f'Total: {count}')
+            # print(f'Total: {count}')
+            # divisions['Total'] = count
+            return divisions
         return count
 
     @staticmethod
@@ -543,7 +549,7 @@ class PieceMoves:
                     # check for squares not being attacked
                     if ((not board.is_square_being_attacked_by_color(pos, enemy_color)) # king in peace
                     and (not board.is_square_being_attacked_by_color(pos.get_offset((-1, 0)), enemy_color)) # queen space in peace
-                    and (not board.is_square_being_attacked_by_color(pos.get_offset((-2, 0))), enemy_color)):  # bishop space in peace
+                    and (not board.is_square_being_attacked_by_color(pos.get_offset((-2, 0)), enemy_color))):  # bishop space in peace
                         # no knight needed, king does not traverse there
                         castling_moves.append(Move(pos, pos.get_offset((-2, 0)), board=board))
 
@@ -576,7 +582,77 @@ class PieceMoves:
             case _:
                 return []
 
-b = Board()
+import stockfish
+def stockfish_perft(position: Board, depth: int) -> dict[str: int]:
+    p = stockfish.start_ink()
+    stockfish.send_command(p, f"position fen {position.fen}")
+    result = stockfish.send_command_and_grab_output(p, f"go perft {depth}")
+    stockfish.close_ink(p)
+    return result
+
+def compare_engine_stockfish(position: Board, depth: int, no_recursion: bool=False):
+    expected = stockfish_perft(position, depth)
+    actual = PieceMoves.perft(position, depth)
+    if depth == 1:
+        print(f'Stockfish: {len(expected)} Engine: {len(actual)}')
+        if len(expected) != len(actual):
+            print("Stockfish generates different amount of moves in position:")
+            print(position.fen)
+
+            e_moves = [m.engine_move for m in position.generate_legal_moves()]
+            s_moves = list(expected.keys())
+            print(f'Engine Stockfish:')
+            for move in e_moves:
+                print(f'{move}   {move in s_moves}')
+            if len(e_moves) < len(s_moves):
+                print('Stockfish found these moves that the engine did not found:')
+                for move in s_moves:
+                    if move not in e_moves:
+                        print(move)
+        else:
+            if no_recursion:
+                moves = list(expected.keys())
+                for move in moves:
+                    new_board = position.branch_move(move)
+                    print(f'Depth 1 moves match with stockfish, searching further depth {move}...')
+                    compare_engine_stockfish(new_board, depth)
+
+        return
+
+    discrepancies = {}
+    for key in set(expected) | set(actual):
+        val_exp = expected.get(key)
+        val_act = actual.get(key)
+        if val_exp != val_act:
+            discrepancies[key] = (val_exp, val_act)
+
+    if len(discrepancies) > 0:
+        for n, d in discrepancies.items():
+            print(f"{n}: {d[1]} ({d[0]} expected)")
+        print(str(len(discrepancies)) + ' errors total in position:\n' + position.fen)
+        err_move = list(discrepancies.items())[0]
+        print(f"expanding {err_move[0]}")
+        new_board = position.branch_move(err_move[0])
+        compare_engine_stockfish(new_board, depth - 1)
+    else:
+        print('  Engine  | Stockfish')
+        e_total = 0
+        s_total = 0
+        for e, s in zip(dict(sorted(expected.items())).items(), dict(sorted(actual.items())).items()):
+            print(f'{e[0]}: {e[1]} | {s[0]}: {s[1]}')
+            e_total += e[1]
+            s_total += s[1]
+        print(f'tsum: {e_total} | tsum: {s_total}')
+
+
+
+
+
+
+b = Board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0")
 t = time.perf_counter()
-PieceMoves.perft(b, 3)
+compare_engine_stockfish(b, 2)
 print(time.perf_counter() - t)
+
+# t = Board('rnbqkbnr/1P6/2p1ppp1/1PP1PPP1/8/3p3p/p2P3P/RNBQKBNR b KQkq - 0 19')
+# print([m.engine_move for m in t.generate_legal_moves()])
