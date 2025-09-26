@@ -303,7 +303,7 @@ class Board:
         for index, piece in enumerate(array):
             if index != 0 and index % 8 == 0:
                 fen += "/"  # rank separator
-            if piece:
+            if type(piece) == Piece:
                 fen += piece.fen_piece
             else:
                 fen += "1"
