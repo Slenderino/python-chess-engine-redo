@@ -305,6 +305,8 @@ class Board:
                 fen += "/"  # rank separator
             if type(piece) == Piece:
                 fen += piece.fen_piece
+            elif type(piece) == int:
+                fen += Piece(piece).fen_piece
             else:
                 fen += "1"
 
